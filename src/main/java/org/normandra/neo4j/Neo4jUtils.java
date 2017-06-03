@@ -194,25 +194,13 @@
 
 package org.normandra.neo4j;
 
-import org.neo4j.graphdb.DynamicLabel;
-import org.neo4j.graphdb.DynamicRelationshipType;
-import org.neo4j.graphdb.Label;
-import org.neo4j.graphdb.PropertyContainer;
-import org.neo4j.graphdb.RelationshipType;
+import org.neo4j.graphdb.*;
 import org.normandra.meta.ColumnMeta;
 import org.normandra.meta.EntityMeta;
 import org.normandra.util.DataUtils;
 
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -220,8 +208,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * Date: 7/11/14
  */
-public class Neo4jUtils
-{
+public class Neo4jUtils {
     private static final RelationshipType genericRelationshipType = DynamicRelationshipType.withName("Edge");
 
     private static final Label genericLabel = DynamicLabel.label("Entity");
@@ -230,16 +217,13 @@ public class Neo4jUtils
 
     private static final Map<String, Label> labels = new ConcurrentHashMap<>();
 
-    public static RelationshipType getRelationshipType(final EntityMeta meta)
-    {
-        if (null == meta)
-        {
+    public static RelationshipType getRelationshipType(final EntityMeta meta) {
+        if (null == meta) {
             return genericRelationshipType;
         }
         final String name = meta.getTable();
         final RelationshipType existing = relationshipTypes.get(name);
-        if (existing != null)
-        {
+        if (existing != null) {
             return existing;
         }
         final RelationshipType type = DynamicRelationshipType.withName(name);
@@ -247,11 +231,9 @@ public class Neo4jUtils
         return type;
     }
 
-    private static Label getLabel(final String name)
-    {
+    private static Label getLabel(final String name) {
         final Label existing = labels.get(name);
-        if (existing != null)
-        {
+        if (existing != null) {
             return existing;
         }
         final Label type = DynamicLabel.label(name);
@@ -259,28 +241,22 @@ public class Neo4jUtils
         return type;
     }
 
-    public static Label getLabel(final EntityMeta meta)
-    {
-        if (null == meta)
-        {
+    public static Label getLabel(final EntityMeta meta) {
+        if (null == meta) {
             return genericLabel;
         }
         return getLabel(meta.getTable());
     }
 
-    public static Map<ColumnMeta, Object> unpackValues(final EntityMeta meta, final PropertyContainer props)
-    {
-        if (null == meta || null == props)
-        {
+    public static Map<ColumnMeta, Object> unpackValues(final EntityMeta meta, final PropertyContainer props) {
+        if (null == meta || null == props) {
             return Collections.emptyMap();
         }
 
         final Map<ColumnMeta, Object> map = new LinkedHashMap<>();
-        for (final String property : props.getPropertyKeys())
-        {
+        for (final String property : props.getPropertyKeys()) {
             final ColumnMeta column = meta.findColumn(property);
-            if (column != null)
-            {
+            if (column != null) {
                 final Object value = unpackValue(column, props.getProperty(property));
                 map.put(column, value);
             }
@@ -288,222 +264,160 @@ public class Neo4jUtils
         return Collections.unmodifiableMap(map);
     }
 
-    public static Object unpackValue(final ColumnMeta column, final Object value)
-    {
-        if (null == value)
-        {
+    public static Object unpackValue(final ColumnMeta column, final Object value) {
+        if (null == value) {
             return null;
         }
 
-        if (column.isCollection())
-        {
+        if (column.isCollection()) {
             final Collection list;
-            if (value instanceof Collection)
-            {
+            if (value instanceof Collection) {
                 list = (Collection) value;
-            }
-            else if (value.getClass().isArray())
-            {
+            } else if (value.getClass().isArray()) {
                 final Class<?> arrayType = value.getClass();
-                if (String[].class.equals(arrayType))
-                {
+                if (String[].class.equals(arrayType)) {
                     list = Arrays.asList((String[]) value);
-                }
-                else if (boolean[].class.equals(arrayType))
-                {
+                } else if (boolean[].class.equals(arrayType)) {
                     list = DataUtils.fromBooleanArray((boolean[]) value);
-                }
-                else if (long[].class.equals(arrayType))
-                {
+                } else if (long[].class.equals(arrayType)) {
                     list = DataUtils.fromLongArray((long[]) value);
-                }
-                else if (int[].class.equals(arrayType))
-                {
+                } else if (int[].class.equals(arrayType)) {
                     list = DataUtils.fromIntArray((int[]) value);
-                }
-                else if (short[].class.equals(arrayType))
-                {
+                } else if (short[].class.equals(arrayType)) {
                     list = DataUtils.fromShortArray((short[]) value);
-                }
-                else if (double[].class.equals(arrayType))
-                {
+                } else if (double[].class.equals(arrayType)) {
                     list = DataUtils.fromDoubleArray((double[]) value);
-                }
-                else if (float[].class.equals(arrayType))
-                {
+                } else if (float[].class.equals(arrayType)) {
                     list = DataUtils.fromFloatArray((float[]) value);
-                }
-                else if (char[].class.equals(arrayType))
-                {
+                } else if (char[].class.equals(arrayType)) {
                     list = DataUtils.fromCharArray((char[]) value);
-                }
-                else
-                {
+                } else {
                     throw new IllegalStateException("Unknown collection of type " + value + "].");
                 }
-            }
-            else
-            {
+            } else {
                 throw new IllegalStateException("Unknown collection of type " + value + "].");
             }
             final List packed = new ArrayList<>(list.size());
-            for (final Object item : list)
-            {
+            for (final Object item : list) {
                 final Object pack = unpackRaw(column, item);
                 packed.add(pack);
             }
             return packed;
-        }
-        else
-        {
+        } else {
             return unpackRaw(column, value);
         }
     }
 
-    private static Object unpackRaw(final ColumnMeta column, final Object value)
-    {
-        if (null == value)
-        {
+    private static Object unpackRaw(final ColumnMeta column, final Object value) {
+        if (null == value) {
             return null;
         }
         final Class<?> clazz = column.getType();
-        if (UUID.class.equals(clazz))
-        {
+        if (UUID.class.equals(clazz)) {
             return DataUtils.stringToUUID(value.toString());
         }
-        if (InetAddress.class.equals(clazz))
-        {
+        if (InetAddress.class.equals(clazz)) {
             return DataUtils.stringToUUID(value.toString());
         }
-        if (Date.class.equals(clazz))
-        {
+        if (Date.class.equals(clazz)) {
             return DataUtils.longToDate((Long) value);
         }
-        if (column.isJson())
-        {
+        if (column.isJson()) {
             return DataUtils.jsonToObject(value.toString(), clazz);
         }
         return value;
     }
 
-    public static Object packValue(final ColumnMeta column, final Object value)
-    {
-        if (null == value)
-        {
+    public static Object packValue(final ColumnMeta column, final Object value) {
+        if (null == value) {
             return null;
         }
-        if (column.isCollection() && value instanceof Collection)
-        {
+        if (column.isCollection() && value instanceof Collection) {
             final Collection list = (Collection) value;
             final int num = list.size();
-            if (list.isEmpty())
-            {
+            if (list.isEmpty()) {
                 return null;
             }
             final List packed = new ArrayList(num);
             Class<?> type = null;
-            for (final Object item : list)
-            {
+            for (final Object item : list) {
                 final Object pack = packRaw(column, item);
-                if (pack != null)
-                {
+                if (pack != null) {
                     type = pack.getClass();
                     packed.add(pack);
                 }
             }
-            if (packed.isEmpty() || null == type)
-            {
+            if (packed.isEmpty() || null == type) {
                 return null;
             }
-            if (String.class.equals(type))
-            {
+            if (String.class.equals(type)) {
                 return packed.toArray(new String[packed.size()]);
             }
-            if (Boolean.class.equals(type))
-            {
+            if (Boolean.class.equals(type)) {
                 return DataUtils.toBooleanArray(packed);
             }
-            if (Long.class.equals(type))
-            {
+            if (Long.class.equals(type)) {
                 return DataUtils.toLongArray(packed);
             }
-            if (Integer.class.equals(type))
-            {
+            if (Integer.class.equals(type)) {
                 return DataUtils.toIntArray(packed);
             }
-            if (Short.class.equals(type))
-            {
+            if (Short.class.equals(type)) {
                 return DataUtils.toShortArray(packed);
             }
-            if (Double.class.equals(type))
-            {
+            if (Double.class.equals(type)) {
                 return DataUtils.toDoubleArray(packed);
             }
-            if (Float.class.equals(type))
-            {
+            if (Float.class.equals(type)) {
                 return DataUtils.toFloatArray(packed);
             }
-            if (Character.class.equals(type))
-            {
+            if (Character.class.equals(type)) {
                 return DataUtils.toCharArray(packed);
             }
             throw new IllegalStateException("Unexpected collection of type [" + type + "].");
-        }
-        else
-        {
+        } else {
             return packRaw(column, value);
         }
     }
 
-    private static Object packRaw(final ColumnMeta column, final Object value)
-    {
-        if (null == value)
-        {
+    private static Object packRaw(final ColumnMeta column, final Object value) {
+        if (null == value) {
             return null;
         }
         final Class<?> clazz = column.getType();
-        if (UUID.class.equals(clazz))
-        {
+        if (UUID.class.equals(clazz)) {
             return DataUtils.uuidToString((UUID) value);
         }
-        if (Date.class.equals(clazz))
-        {
+        if (Date.class.equals(clazz)) {
             return DataUtils.dateToLong((Date) value);
         }
-        if (column.isJson())
-        {
+        if (column.isJson()) {
             return DataUtils.objectToJson(value);
         }
         return value;
     }
 
-    public static Map<ColumnMeta, Object> mapProperties(final EntityMeta meta, final Map<String, Object> properties)
-    {
-        if (null == meta)
-        {
+    public static Map<ColumnMeta, Object> mapProperties(final EntityMeta meta, final Map<String, Object> properties) {
+        if (null == meta) {
             return Collections.emptyMap();
         }
-        if (null == properties || properties.isEmpty())
-        {
+        if (null == properties || properties.isEmpty()) {
             return Collections.emptyMap();
         }
 
         final Map<ColumnMeta, Object> data = new LinkedHashMap<>();
-        for (final Map.Entry<String, Object> entry : properties.entrySet())
-        {
+        for (final Map.Entry<String, Object> entry : properties.entrySet()) {
             final String property = entry.getKey();
             final Object value = entry.getValue();
             final ColumnMeta column = meta.findColumn(property);
-            if (column != null)
-            {
+            if (column != null) {
                 data.put(column, unpackValue(column, value));
             }
         }
         return Collections.unmodifiableMap(data);
     }
 
-    private Neo4jUtils()
-    {
+    private Neo4jUtils() {
 
     }
 }

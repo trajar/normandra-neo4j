@@ -196,11 +196,11 @@ package org.normandra.neo4j;
 
 import org.apache.commons.lang.NullArgumentException;
 import org.neo4j.graphdb.PropertyContainer;
+import org.normandra.meta.ColumnMeta;
+import org.normandra.meta.EntityMeta;
 import org.normandra.property.EmptyPropertyFilter;
 import org.normandra.property.PropertyFilter;
 import org.normandra.property.PropertyModel;
-import org.normandra.meta.ColumnMeta;
-import org.normandra.meta.EntityMeta;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -212,31 +212,25 @@ import java.util.Map;
  * <p>
  * Date: 7/14/14
  */
-public class Neo4jPropertyModel implements PropertyModel
-{
+public class Neo4jPropertyModel implements PropertyModel {
     private final PropertyContainer container;
 
     private final EntityMeta meta;
 
     private final PropertyFilter filter;
 
-    public Neo4jPropertyModel(final EntityMeta meta, final PropertyContainer props)
-    {
+    public Neo4jPropertyModel(final EntityMeta meta, final PropertyContainer props) {
         this(meta, props, EmptyPropertyFilter.getInstance());
     }
 
-    public Neo4jPropertyModel(final EntityMeta meta, final PropertyContainer props, final PropertyFilter filter)
-    {
-        if (null == meta)
-        {
+    public Neo4jPropertyModel(final EntityMeta meta, final PropertyContainer props, final PropertyFilter filter) {
+        if (null == meta) {
             throw new NullArgumentException("meta");
         }
-        if (null == props)
-        {
+        if (null == props) {
             throw new NullArgumentException("property container");
         }
-        if (null == filter)
-        {
+        if (null == filter) {
             throw new NullArgumentException("property filter");
         }
         this.meta = meta;
@@ -245,63 +239,47 @@ public class Neo4jPropertyModel implements PropertyModel
     }
 
     @Override
-    public Map<ColumnMeta, Object> get()
-    {
+    public Map<ColumnMeta, Object> get() {
         return Neo4jUtils.unpackValues(this.meta, this.container);
     }
 
     @Override
-    public void put(final Map<ColumnMeta, Object> data)
-    {
-        if (null == data || data.isEmpty())
-        {
+    public void put(final Map<ColumnMeta, Object> data) {
+        if (null == data || data.isEmpty()) {
             // clear properties
-            for (final ColumnMeta column : this.meta)
-            {
-                if (!column.isPrimaryKey())
-                {
+            for (final ColumnMeta column : this.meta) {
+                if (!column.isPrimaryKey()) {
                     this.container.removeProperty(column.getName());
                 }
             }
-        }
-        else
-        {
+        } else {
             // update properties
             final List<ColumnMeta> removed = new ArrayList<>(data.size());
-            for (final ColumnMeta column : this.meta)
-            {
-                if (data.get(column) == null)
-                {
+            for (final ColumnMeta column : this.meta) {
+                if (data.get(column) == null) {
                     removed.add(column);
                 }
             }
-            for (final Map.Entry<ColumnMeta, Object> entry : data.entrySet())
-            {
+            for (final Map.Entry<ColumnMeta, Object> entry : data.entrySet()) {
                 final ColumnMeta column = entry.getKey();
-                if (this.filter.accept(this.meta, column))
-                {
+                if (this.filter.accept(this.meta, column)) {
                     final Object raw = entry.getValue();
                     final Object packed = Neo4jUtils.packValue(column, raw);
-                    if (packed != null)
-                    {
+                    if (packed != null) {
                         this.container.setProperty(column.getName(), packed);
-                    }
-                    else
-                    {
+                    } else {
                         this.container.removeProperty(column.getName());
                     }
                 }
             }
-            for (final ColumnMeta column : removed)
-            {
+            for (final ColumnMeta column : removed) {
                 this.container.removeProperty(column.getName());
             }
         }
     }
 
     @Override
-    public void close()
-    {
+    public void close() {
 
     }
 }

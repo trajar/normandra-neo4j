@@ -203,6 +203,7 @@ import org.normandra.data.DataHolderFactory;
 import org.normandra.data.EntityReference;
 import org.normandra.data.GraphDataHandler;
 import org.normandra.data.StaticEntityReference;
+import org.normandra.graph.Edge;
 import org.normandra.graph.Graph;
 import org.normandra.graph.GraphAdapter;
 import org.normandra.graph.GraphEntitySession;
@@ -322,6 +323,11 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         }
 
         return this.getNodes(meta, Arrays.asList(keys));
+    }
+
+    @Override
+    public Edge getEdge(EntityMeta meta, Object key) throws NormandraException {
+        throw new UnsupportedOperationException();
     }
 
     @Override

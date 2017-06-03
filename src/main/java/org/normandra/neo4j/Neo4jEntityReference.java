@@ -213,8 +213,7 @@ import java.util.Map;
  * <p>
  * Date: 8/29/14
  */
-public class Neo4jEntityReference<T> implements EntityReference<T>
-{
+public class Neo4jEntityReference<T> implements EntityReference<T> {
     private static final Logger logger = LoggerFactory.getLogger(Neo4jEntityReference.class);
 
     private final Neo4jGraph graph;
@@ -225,18 +224,14 @@ public class Neo4jEntityReference<T> implements EntityReference<T>
 
     private T instance;
 
-    public Neo4jEntityReference(final Neo4jGraph graph, final EntityMeta meta, final PropertyContainer properties)
-    {
-        if (null == graph)
-        {
+    public Neo4jEntityReference(final Neo4jGraph graph, final EntityMeta meta, final PropertyContainer properties) {
+        if (null == graph) {
             throw new NullArgumentException("graph");
         }
-        if (null == meta)
-        {
+        if (null == meta) {
             throw new NullArgumentException("entity meta");
         }
-        if (null == properties)
-        {
+        if (null == properties) {
             throw new NullArgumentException("property container");
         }
         this.graph = graph;
@@ -245,10 +240,8 @@ public class Neo4jEntityReference<T> implements EntityReference<T>
     }
 
     @Override
-    public T getInstance() throws NormandraException
-    {
-        if (this.instance != null)
-        {
+    public T getInstance() throws NormandraException {
+        if (this.instance != null) {
             return this.instance;
         }
 
@@ -256,8 +249,7 @@ public class Neo4jEntityReference<T> implements EntityReference<T>
         this.graph.withTransaction((tx) -> {
             data.putAll(Neo4jUtils.unpackValues(this.meta, this.properties));
         });
-        if (data.isEmpty())
-        {
+        if (data.isEmpty()) {
             return null;
         }
         final EntityBuilder builder = new EntityBuilder(new GraphEntitySession(this.graph), this.graph.buildDataFactory());

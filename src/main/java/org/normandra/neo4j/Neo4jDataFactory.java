@@ -206,7 +206,7 @@ import org.normandra.meta.*;
  * <p>
  * Date: 7/11/14
  */
- class Neo4jDataFactory implements DataHolderFactory {
+class Neo4jDataFactory implements DataHolderFactory {
     private final Graph graph;
 
     private final GraphMeta meta;
@@ -229,21 +229,21 @@ import org.normandra.meta.*;
 
     @Override
     public DataHolder createLazy(EntityMeta meta, ColumnMeta column, Object key) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public DataHolder createJoinCollection(EntityMeta meta, JoinCollectionMeta column, Object key) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public DataHolder createJoinColumn(EntityMeta meta, JoinColumnMeta column, Object key) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public DataHolder createMappedColumn(EntityMeta meta, MappedColumnMeta column, Object key) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 }
