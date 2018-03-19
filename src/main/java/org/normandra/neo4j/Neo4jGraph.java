@@ -196,6 +196,7 @@ package org.normandra.neo4j;
 
 import org.apache.commons.lang.NullArgumentException;
 import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.Node;
 import org.normandra.DatabaseQuery;
 import org.normandra.NormandraException;
 import org.normandra.cache.EntityCache;
@@ -203,10 +204,7 @@ import org.normandra.data.DataHolderFactory;
 import org.normandra.data.EntityReference;
 import org.normandra.data.GraphDataHandler;
 import org.normandra.data.StaticEntityReference;
-import org.normandra.graph.Edge;
-import org.normandra.graph.Graph;
-import org.normandra.graph.GraphAdapter;
-import org.normandra.graph.GraphEntitySession;
+import org.normandra.graph.*;
 import org.normandra.meta.ColumnMeta;
 import org.normandra.meta.EntityMeta;
 import org.normandra.meta.GraphMeta;
@@ -264,12 +262,22 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     }
 
     @Override
-    public DatabaseQuery executeQuery(EntityMeta meta, String query, Map<String, Object> parameters) throws NormandraException {
+    public Object scalarQuery(String query) throws NormandraException {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Object scalarQuery(String query) throws NormandraException {
+    public NodeQuery queryNodes(EntityMeta meta, String query, Map<String, Object> parameters) throws NormandraException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public EdgeQuery queryEdges(EntityMeta meta, String query, Map<String, Object> parameters) throws NormandraException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public DatabaseQuery query(EntityMeta meta, String query, Map<String, Object> parameters) throws NormandraException {
         throw new UnsupportedOperationException();
     }
 

@@ -259,7 +259,7 @@ public class Neo4jNode<T> implements Node<T> {
     }
 
     @Override
-    public <E> boolean hasEdge(final Node node, final E entity) throws NormandraException {
+    public <E, N> boolean hasEdge(final Node<N> node, final E entity) throws NormandraException {
         if (null == node) {
             throw new NullArgumentException("node");
         }
@@ -275,7 +275,7 @@ public class Neo4jNode<T> implements Node<T> {
     }
 
     @Override
-    public <E> Neo4jEdge<E> createEdge(final Node node, final E entity) throws NormandraException {
+    public <E, N> Neo4jEdge<E> createEdge(final Node<N> node, final E entity) throws NormandraException {
         if (null == node) {
             throw new NullArgumentException("node");
         }
@@ -361,12 +361,12 @@ public class Neo4jNode<T> implements Node<T> {
     }
 
     @Override
-    public Iterable<Node> expandByType(int depth, Class<?> edgeType) throws NormandraException {
+    public <E, N> Iterable<Node<N>> expandByType(int depth, Class<E> edgeType) throws NormandraException {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Iterable<Node> expandByTypes(int depth, Iterable<Class> edgeTypes) throws NormandraException {
+    public <E, N> Iterable<Node<N>> expandByTypes(int depth, Iterable<Class<E>> edgeTypes) throws NormandraException {
         throw new UnsupportedOperationException();
     }
 
@@ -410,7 +410,7 @@ public class Neo4jNode<T> implements Node<T> {
     }
 
     @Override
-    public Collection<Edge> getEdgesByTypes(final Iterable<Class> types) throws NormandraException {
+    public <E> Collection<Edge<E>> getEdgesByTypes(final Iterable<Class<E>> types) throws NormandraException {
         if (null == types) {
             return Collections.emptyList();
         }
@@ -433,7 +433,7 @@ public class Neo4jNode<T> implements Node<T> {
         // query edges
         try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
             final int num = this.node.getDegree();
-            final List<Edge> edges = new ArrayList<>(num);
+            final List<Edge<E>> edges = new ArrayList<>(num);
             final RelationshipType[] list = relations.toArray(new RelationshipType[relations.size()]);
             for (final Relationship relationship : this.node.getRelationships(list)) {
                 final Edge edge = this.graph.buildEdge(relationship);
