@@ -110,14 +110,12 @@
                             org.normandra.neo4j.*; version="${project.version}"
                         </Export-Package>
                         <Import-Package>
-                            com.fasterxml.jackson.*; version="[2.7, 3.0)"; resolution:="optional",
                             javax.persistence.*; version="[2.0, 3.0)",
                             javax.transaction.*; version="[1.1, 2.0)",
                             javassist.*; version="[3.19, 4.0)",
                             org.apache.commons.lang.*; version="[2.0, 3.0)",
                             org.apache.commons.lang3.*; version="[3.0, 4.0)",
                             org.apache.logging.log4j.*; version="[2.0, 3.0)",
-                            org.codehaus.jackson.*; version="[1.9, 2.0)"; resolution:="optional",
                             org.objectweb.asm; version="[5.0, 5.1)"; resolution:="optional",
                             org.osgi.*,
                             org.slf4j.*; version="[1.7, 1.8)",
