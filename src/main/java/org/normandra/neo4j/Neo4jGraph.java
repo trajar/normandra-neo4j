@@ -548,11 +548,6 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     }
 
     @Override
-    public boolean pendingWork() {
-        return this.transaction != null;
-    }
-
-    @Override
     public void beginWork() throws NormandraException {
         if (this.transaction != null) {
             throw new NormandraException("Transaction already started.");
