@@ -199,6 +199,7 @@ import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.Node;
 import org.normandra.DatabaseQuery;
 import org.normandra.NormandraException;
+import org.normandra.PropertyQuery;
 import org.normandra.cache.EntityCache;
 import org.normandra.data.DataHolderFactory;
 import org.normandra.data.EntityReference;
@@ -278,6 +279,11 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
     @Override
     public DatabaseQuery query(EntityMeta meta, String query, Map<String, Object> parameters) throws NormandraException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public PropertyQuery query(String query, Map<String, Object> parameters) throws NormandraException {
         throw new UnsupportedOperationException();
     }
 
