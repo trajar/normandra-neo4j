@@ -592,4 +592,9 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             throw new NormandraException("Unable to rollback transaction.", e);
         }
     }
+
+    @Override
+    public Object load(EntityMeta meta, Map<ColumnMeta, Object> data) throws NormandraException {
+        throw new UnsupportedOperationException();
+    }
 }
