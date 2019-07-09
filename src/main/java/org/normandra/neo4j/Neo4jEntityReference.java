@@ -245,10 +245,7 @@ public class Neo4jEntityReference<T> implements EntityReference<T> {
             return this.instance;
         }
 
-        final Map<ColumnMeta, Object> data = new LinkedHashMap<>();
-        this.graph.withTransaction((tx) -> {
-            data.putAll(Neo4jUtils.unpackValues(this.meta, this.properties));
-        });
+        final Map<ColumnMeta, Object> data = Neo4jUtils.unpackValues(this.meta, this.properties);
         if (data.isEmpty()) {
             return null;
         }
