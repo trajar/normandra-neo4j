@@ -195,10 +195,11 @@
 package org.normandra.neo4j;
 
 import org.apache.commons.lang.NullArgumentException;
+import org.apache.commons.lang.StringUtils;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.graphdb.Transaction;
 import org.normandra.NormandraException;
+import org.normandra.Transaction;
 import org.normandra.data.DataHandler;
 import org.normandra.data.EntityReference;
 import org.normandra.data.GraphDataHandler;
@@ -206,11 +207,14 @@ import org.normandra.data.StaticEntityReference;
 import org.normandra.graph.Edge;
 import org.normandra.graph.GraphEntitySession;
 import org.normandra.graph.Node;
+import org.normandra.graph.NodeQuery;
 import org.normandra.meta.EntityMeta;
 import org.normandra.property.PropertyModel;
+import org.normandra.util.ArraySet;
 import org.normandra.util.EntityPersistence;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * wrapped neo4j node context
@@ -222,9 +226,11 @@ public class Neo4jNode<T> implements Node<T> {
 
     private final org.neo4j.graphdb.Node node;
 
+    private final EntityMeta meta;
+
     private EntityReference<T> data;
 
-    public Neo4jNode(final Neo4jGraph graph, final org.neo4j.graphdb.Node node, final EntityReference<T> ref) {
+    public Neo4jNode(final Neo4jGraph graph, final org.neo4j.graphdb.Node node, final EntityMeta meta, final EntityReference<T> ref) {
         if (null == graph) {
             throw new NullArgumentException("graph");
         }
@@ -234,8 +240,12 @@ public class Neo4jNode<T> implements Node<T> {
         if (null == ref) {
             throw new NullArgumentException("reference");
         }
+        if (null == meta) {
+            throw new NullArgumentException("meta");
+        }
         this.graph = graph;
         this.node = node;
+        this.meta = meta;
         this.data = ref;
     }
 
@@ -250,7 +260,7 @@ public class Neo4jNode<T> implements Node<T> {
 
     @Override
     public void delete() throws NormandraException {
-        try (final Transaction tx = this.graph.getService().beginTx()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             this.api().delete();
             tx.success();
         } catch (final Exception e) {
@@ -291,7 +301,7 @@ public class Neo4jNode<T> implements Node<T> {
         }
 
         final RelationshipType type = Neo4jUtils.getRelationshipType(meta);
-        try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             // save relationship properties
             final Relationship relationship = this.node.createRelationshipTo(neo4j.node, type);
             if (null == relationship) {
@@ -324,7 +334,7 @@ public class Neo4jNode<T> implements Node<T> {
             throw new IllegalArgumentException();
         }
 
-        try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             // save node
             final PropertyModel model = this.graph.buildModel(meta, this.api());
             final GraphDataHandler handler = new GraphDataHandler(model);
@@ -340,34 +350,126 @@ public class Neo4jNode<T> implements Node<T> {
 
     @Override
     public int getDegree() throws NormandraException {
-        try (final Transaction tx = this.graph.getService().beginTx()) {
-            return this.node.getDegree();
+        try {
+            try (final Transaction tx = this.graph.beginTransaction()) {
+                return this.node.getDegree();
+            }
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to get node degree.", e);
         }
+    }
+
+    private Map<String, Object> parametersForMyself() {
+        final Map<String, Object> params = new HashMap<>(1);
+        params.put("id", this.node.getId());
+        return params;
     }
 
     @Override
     public Iterable<Node> getNeighbors() throws NormandraException {
-        throw new UnsupportedOperationException();
+        final Set<Node> neighbors = new HashSet<>();
+        try {
+            try (final NodeQuery<?> q = this.graph.queryNodes(
+                    null, // node could be any type
+                    "MATCH (n)--(connected) WHERE id(n)=$id RETURN DISTINCT connected",
+                    parametersForMyself())) {
+                for (final Node node : q) {
+                    if (!node.equals(this)) {
+                        neighbors.add(node);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new NormandraException("Unable to query neighbors.", e);
+        }
+        return Collections.unmodifiableCollection(neighbors);
     }
 
     @Override
     public <E, N> Iterable<Node<N>> getNeighbors(Class<E> edgeType, Class<N> nodeType) throws NormandraException {
-        throw new UnsupportedOperationException();
+        final EntityMeta nodeMeta = nodeType != null ? this.graph.getMeta().getNodeMeta(nodeType) : null;
+        final EntityMeta edgeMeta = edgeType != null ? this.graph.getMeta().getEdgeMeta(edgeType) : null;
+
+        String edgeLabel = "";
+        if (edgeMeta != null) {
+            edgeLabel = "[:" + Neo4jUtils.getRelationshipType(edgeMeta).name() + "]";
+        }
+
+        final Set<Node<N>> neighbors = new HashSet<>();
+        try {
+            try (final NodeQuery<N> q = this.graph.queryNodes(
+                    nodeMeta,
+                    "MATCH (n)-" + edgeLabel + "-(connected) WHERE id(n)=$id RETURN DISTINCT connected",
+                    parametersForMyself())) {
+                for (final Node<N> node : q) {
+                    if (!node.equals(this)) {
+                        neighbors.add(node);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new NormandraException("Unable to query neighbors.", e);
+        }
+        return Collections.unmodifiableCollection(neighbors);
     }
 
     @Override
-    public Iterable<Node> expand(int depth) throws NormandraException {
-        throw new UnsupportedOperationException();
+    public Iterable<Node> expand(final int depth) throws NormandraException {
+        final Set<Node> neighbors = new HashSet<>();
+        try {
+            try (final NodeQuery<?> q = this.graph.queryNodes(
+                    null, // node could be any type
+                    "MATCH (n)-[*1.." + depth + "]-(connected) WHERE id(n)=$id RETURN DISTINCT connected",
+                    parametersForMyself())) {
+                for (final Node node : q) {
+                    if (!node.equals(this)) {
+                        neighbors.add(node);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new NormandraException("Unable to query neighbors.", e);
+        }
+        return Collections.unmodifiableCollection(neighbors);
     }
 
     @Override
     public <E, N> Iterable<Node<N>> expandByType(int depth, Class<E> edgeType) throws NormandraException {
-        throw new UnsupportedOperationException();
+        return this.expandByTypes(depth, Collections.singleton(edgeType));
     }
 
     @Override
-    public <E, N> Iterable<Node<N>> expandByTypes(int depth, Iterable<Class<E>> edgeTypes) throws NormandraException {
-        throw new UnsupportedOperationException();
+    public <E, N> Iterable<Node<N>> expandByTypes(final int depth, final Iterable<Class<E>> edgeTypes) throws NormandraException {
+
+        final Set<String> edgeLabels = new ArraySet<>();
+        if (edgeTypes != null) {
+            for (final Class<?> clazz : edgeTypes) {
+                final EntityMeta meta = this.graph.getMeta().getEdgeMeta(clazz);
+                if (meta != null) {
+                    edgeLabels.add(Neo4jUtils.getRelationshipType(meta).name());
+                }
+            }
+        }
+        final String edgeLabel = StringUtils.join(
+                edgeLabels.stream().map(x -> ":" + x).collect(Collectors.toList()),
+                "|");
+
+        final Set<Node<N>> neighbors = new HashSet<>();
+        try {
+            try (final NodeQuery<?> q = this.graph.queryNodes(
+                    null, // node could be any type
+                    "MATCH (n)-[" + edgeLabel + "*1.." + depth + "]-(connected) WHERE id(n)=$id RETURN DISTINCT connected",
+                    parametersForMyself())) {
+                for (final Node node : q) {
+                    if (!node.equals(this)) {
+                        neighbors.add(node);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new NormandraException("Unable to query neighbors.", e);
+        }
+        return Collections.unmodifiableCollection(neighbors);
     }
 
     @Override
@@ -449,29 +551,15 @@ public class Neo4jNode<T> implements Node<T> {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        Neo4jNode neo4jNode = (Neo4jNode) o;
-
-        if (graph != null ? !graph.equals(neo4jNode.graph) : neo4jNode.graph != null) {
-            return false;
-        }
-        if (node != null ? !node.equals(neo4jNode.node) : neo4jNode.node != null) {
-            return false;
-        }
-
-        return true;
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Neo4jNode<?> neo4jNode = (Neo4jNode<?>) o;
+        return Objects.equals(graph, neo4jNode.graph) &&
+                Objects.equals(node, neo4jNode.node);
     }
 
     @Override
     public int hashCode() {
-        int result = graph != null ? graph.hashCode() : 0;
-        result = 31 * result + (node != null ? node.hashCode() : 0);
-        return result;
+        return Objects.hash(graph, node);
     }
 }

@@ -1,2 +1,5 @@
 *.iml
 target/
+logs/
+
+store_lock

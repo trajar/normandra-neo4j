@@ -13,12 +13,10 @@ import org.normandra.DatabaseSession;
 import org.normandra.NormandraException;
 import org.normandra.cache.EntityCacheFactory;
 import org.normandra.graph.GraphDatabase;
-import org.normandra.meta.ColumnMeta;
-import org.normandra.meta.EntityMeta;
-import org.normandra.meta.GraphMeta;
-import org.normandra.meta.IndexMeta;
+import org.normandra.meta.*;
 
 import java.io.File;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -36,6 +34,18 @@ public class Neo4jDatabase implements GraphDatabase {
     private final EntityCacheFactory cacheFactory;
 
     private final GraphDatabaseFactory databaseFactory;
+
+    public static Neo4jDatabase createLocalEmbedded(
+            final File path,
+            final EntityCacheFactory factory, final DatabaseConstruction mode,
+            final GraphMetaBuilder builder) {
+        final GraphMeta meta = builder.create();
+        try {
+            return new Neo4jDatabase(path.toURI().toURL(), factory, mode, meta);
+        } catch (MalformedURLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     protected Neo4jDatabase(final URL url, final EntityCacheFactory cache, final DatabaseConstruction mode, final GraphMeta meta) {
         this.url = url;
@@ -102,7 +112,7 @@ public class Neo4jDatabase implements GraphDatabase {
 
     @Override
     public boolean registerQuery(EntityMeta meta, String name, String query) throws NormandraException {
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override

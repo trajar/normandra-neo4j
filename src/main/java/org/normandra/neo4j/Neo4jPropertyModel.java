@@ -202,9 +202,7 @@ import org.normandra.property.EmptyPropertyFilter;
 import org.normandra.property.PropertyFilter;
 import org.normandra.property.PropertyModel;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * a property model backed completely by neo4j properties
@@ -244,8 +242,27 @@ public class Neo4jPropertyModel implements PropertyModel {
     }
 
     @Override
-    public void put(final Map<ColumnMeta, Object> data) {
+    public Map<String, Object> fields(final Map<ColumnMeta, Object> data) {
         if (null == data || data.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        final Map<String, Object> fieldmap = new HashMap<>(data.size());
+        for (final Map.Entry<ColumnMeta, Object> entry : data.entrySet()) {
+            final ColumnMeta column = entry.getKey();
+            if (this.filter.accept(this.meta, column)) {
+                final Object raw = entry.getValue();
+                final Object packed = Neo4jUtils.packValue(column, raw);
+                fieldmap.put(column.getName(), packed);
+            }
+        }
+        return Collections.unmodifiableMap(fieldmap);
+    }
+
+    @Override
+    public void put(final Map<ColumnMeta, Object> data) {
+        final Map<String, Object> fields = this.fields(data);
+        if (null == fields || fields.isEmpty()) {
             // clear properties
             for (final ColumnMeta column : this.meta) {
                 if (!column.isPrimaryKey()) {
@@ -254,26 +271,24 @@ public class Neo4jPropertyModel implements PropertyModel {
             }
         } else {
             // update properties
-            final List<ColumnMeta> removed = new ArrayList<>(data.size());
+            final List<String> removed = new ArrayList<>(fields.size());
             for (final ColumnMeta column : this.meta) {
-                if (data.get(column) == null) {
-                    removed.add(column);
+                final String columnName = column.getName();
+                if (fields.get(columnName) == null) {
+                    removed.add(columnName);
                 }
             }
-            for (final Map.Entry<ColumnMeta, Object> entry : data.entrySet()) {
-                final ColumnMeta column = entry.getKey();
-                if (this.filter.accept(this.meta, column)) {
-                    final Object raw = entry.getValue();
-                    final Object packed = Neo4jUtils.packValue(column, raw);
-                    if (packed != null) {
-                        this.container.setProperty(column.getName(), packed);
-                    } else {
-                        this.container.removeProperty(column.getName());
-                    }
+            for (final Map.Entry<String, Object> entry : fields.entrySet()) {
+                final String columnName = entry.getKey();
+                final Object value = entry.getValue();
+                if (value != null) {
+                    this.container.setProperty(columnName, value);
+                } else {
+                    this.container.removeProperty(columnName);
                 }
             }
-            for (final ColumnMeta column : removed) {
-                this.container.removeProperty(column.getName());
+            for (final String columnName : removed) {
+                this.container.removeProperty(columnName);
             }
         }
     }

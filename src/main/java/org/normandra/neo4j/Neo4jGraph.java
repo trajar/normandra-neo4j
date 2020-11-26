@@ -195,8 +195,8 @@
 package org.normandra.neo4j;
 
 import org.apache.commons.lang.NullArgumentException;
-import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.*;
 import org.normandra.DatabaseQuery;
 import org.normandra.NormandraException;
 import org.normandra.PropertyQuery;
@@ -213,8 +213,11 @@ import org.normandra.property.PropertyFilter;
 import org.normandra.property.PropertyModel;
 import org.normandra.util.EntityBuilder;
 import org.normandra.util.EntityPersistence;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * a neo4j graph implementation
@@ -222,6 +225,8 @@ import java.util.*;
  * Date: 7/7/14
  */
 public class Neo4jGraph extends GraphAdapter implements Graph {
+    private final static Logger logger = LoggerFactory.getLogger(Neo4jGraph.class);
+
     public static final String URL = "neo4j.url";
 
     private final GraphDatabaseService service;
@@ -229,6 +234,12 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     private final GraphMeta meta;
 
     private final EntityCache cache;
+
+    private final AtomicInteger transactionDepth = new AtomicInteger(0);
+
+    private boolean transactionRolledback = false;
+
+    private boolean transactionCommitted = false;
 
     private Transaction transaction;
 
@@ -269,7 +280,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
     @Override
     public NodeQuery queryNodes(EntityMeta meta, String query, Map<String, Object> parameters) throws NormandraException {
-        throw new UnsupportedOperationException();
+        return new Neo4jNodeQuery(this, meta, query, parameters);
     }
 
     @Override
@@ -322,7 +333,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             final GraphDataHandler handler = new GraphDataHandler(model);
             new EntityPersistence(new GraphEntitySession(this)).save(meta, instance, handler);
             tx.success();
-            final Neo4jNode neo4j = new Neo4jNode(this, node, new StaticEntityReference(instance));
+            final Neo4jNode neo4j = new Neo4jNode(this, node, meta, new StaticEntityReference(instance));
             this.cache.put(meta, key, neo4j);
             return neo4j;
         } catch (final Exception e) {
@@ -478,6 +489,25 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         }
     }
 
+    private EntityMeta detectMetaForNode(final Node node) throws NormandraException {
+        if (null == node) {
+            return null;
+        }
+        try {
+            try (final org.normandra.Transaction tx = this.beginTransaction()) {
+                for (final Label label : node.getLabels()) {
+                    final EntityMeta meta = this.meta.getNodeMeta(label.name());
+                    if (meta != null) {
+                        return meta;
+                    }
+                }
+            }
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to get node meta.", e);
+        }
+        return null;
+    }
+
     final DataHolderFactory buildDataFactory() {
         return new Neo4jDataFactory(this, this.meta);
     }
@@ -492,31 +522,31 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     }
 
     final Neo4jNode buildNode(final Node node) throws NormandraException {
+        return buildNode(node, null);
+    }
+
+    final Neo4jNode buildNode(final Node node, final EntityMeta expectedMeta) throws NormandraException {
         if (null == node) {
             return null;
         }
 
-        for (final Label label : node.getLabels()) {
-            final EntityMeta meta = this.meta.getNodeMeta(label.name());
-            if (meta != null) {
-                final PropertyModel model = this.buildModel(meta, node);
-                final Map<ColumnMeta, Object> data = model.get();
+        final EntityMeta meta = expectedMeta != null ? expectedMeta : detectMetaForNode(node);
+        final PropertyModel model = this.buildModel(meta, node);
+        final Map<ColumnMeta, Object> data = model.get();
 
-                final Object key = meta.getId().fromData(data);
-                final Neo4jNode cached = this.cache.get(meta, key, Neo4jNode.class);
-                if (cached != null) {
-                    return cached;
-                }
+        final Object key = meta.getId().fromData(data);
+        final Neo4jNode cached = this.cache.get(meta, key, Neo4jNode.class);
+        if (cached != null) {
+            return cached;
+        }
 
-                if (meta.validate(data)) {
-                    final EntityBuilder builder = new EntityBuilder(new GraphEntitySession(this), this.buildDataFactory());
-                    final Object instance = builder.build(meta, data);
-                    final EntityReference ref = new StaticEntityReference<>(instance);
-                    final Neo4jNode neo4j = new Neo4jNode(this, node, ref);
-                    this.cache.put(meta, key, neo4j);
-                    return neo4j;
-                }
-            }
+        if (meta.validate(data)) {
+            final EntityBuilder builder = new EntityBuilder(new GraphEntitySession(this), this.buildDataFactory());
+            final Object instance = builder.build(meta, data);
+            final EntityReference ref = new StaticEntityReference<>(instance);
+            final Neo4jNode neo4j = new Neo4jNode(this, node, meta, ref);
+            this.cache.put(meta, key, neo4j);
+            return neo4j;
         }
 
         return null;
@@ -556,12 +586,29 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     @Override
     public void beginWork() throws NormandraException {
         if (this.transaction != null) {
-            throw new NormandraException("Transaction already started.");
+            final int depth = this.transactionDepth.incrementAndGet();
+            logger.trace("Transaction already started, current depth level is [" + depth + "].");
+            return;
         }
         try {
             this.transaction = this.service.beginTx();
+            this.transactionRolledback = false;
+            this.transactionCommitted = false;
+            if (!this.transactionDepth.compareAndSet(0, 1)) {
+                throw new IllegalStateException("Unexpected transaction state, expected depth of zero.");
+            }
         } catch (final Exception e) {
             throw new NormandraException("Unable to start transaction.", e);
+        }
+    }
+
+    private void validateTransactionState() throws NormandraException {
+        if (null == this.transaction) {
+            // nothing pending
+            return;
+        }
+        if (this.transactionCommitted && this.transactionRolledback) {
+            throw new NormandraException("Invalid transaction state - rolled back and committed.");
         }
     }
 
@@ -570,6 +617,16 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         if (null == this.transaction) {
             throw new NormandraException("Transaction not started.");
         }
+
+        this.transactionCommitted = true;
+        final int depth = this.transactionDepth.decrementAndGet();
+        if (depth > 0) {
+            logger.trace("Transaction committed, current depth is [" + depth + "].");
+            return;
+        }
+
+        this.validateTransactionState();
+
         try {
             this.transaction.success();
             this.transaction.close();
@@ -584,8 +641,17 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         if (null == this.transaction) {
             throw new NormandraException("Transaction not started.");
         }
+
+        this.transactionRolledback = true;
+        final int depth = this.transactionDepth.decrementAndGet();
+        if (depth > 0) {
+            logger.trace("Transaction rolled back, current depth is [" + depth + "].");
+            return;
+        }
+
+        this.validateTransactionState();
+
         try {
-            this.transaction.failure();
             this.transaction.close();
             this.transaction = null;
         } catch (final Exception e) {
