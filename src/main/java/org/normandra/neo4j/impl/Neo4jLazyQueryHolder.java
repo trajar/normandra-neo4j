@@ -192,58 +192,92 @@
  *    limitations under the License.
  */
 
-package org.normandra.neo4j;
+package org.normandra.neo4j.impl;
 
-import org.apache.commons.lang.NullArgumentException;
-import org.normandra.data.BasicDataHolder;
+import org.normandra.NormandraException;
+import org.normandra.PropertyQuery;
 import org.normandra.data.DataHolder;
-import org.normandra.data.DataHolderFactory;
-import org.normandra.graph.Graph;
-import org.normandra.meta.*;
+import org.normandra.meta.EntityMeta;
+import org.normandra.neo4j.Neo4jGraph;
+import org.normandra.neo4j.Neo4jUtils;
+
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * a data factory for basic neo4j relationships
- * <p>
- * Date: 7/11/14
+ * a lazy-loaded neo4j data holder based on query string
  */
-class Neo4jDataFactory implements DataHolderFactory {
-    private final Graph graph;
+public class Neo4jLazyQueryHolder implements DataHolder {
+    private final AtomicBoolean loaded = new AtomicBoolean(false);
 
-    private final GraphMeta meta;
+    private final Neo4jGraph session;
 
-    public Neo4jDataFactory(final Graph graph, final GraphMeta meta) {
-        if (null == graph) {
-            throw new NullArgumentException("graph");
+    private final EntityMeta entity;
+
+    private final boolean collection;
+
+    private final String query;
+
+    private final Map<String, Object> parameters;
+
+    private final List<Object> keys = new ArrayList<>();
+
+    public Neo4jLazyQueryHolder(final Neo4jGraph session, final EntityMeta meta, final boolean collection, final String query, final Map<String, Object> params) {
+        this.session = session;
+        this.entity = meta;
+        this.collection = collection;
+        this.query = query;
+        this.parameters = new HashMap<>(params);
+    }
+
+    @Override
+    public boolean isEmpty() {
+        try {
+            return this.ensureResults().isEmpty();
+        } catch (final Exception e) {
+            throw new IllegalStateException("Unable to query lazy loaded results from [" + this.entity + "].", e);
         }
-        if (null == meta) {
-            throw new NullArgumentException("meta");
+    }
+
+    @Override
+    public Object get() throws NormandraException {
+        final Collection<Object> results = this.ensureResults();
+        if (results.isEmpty()) {
+            return null;
         }
-        this.graph = graph;
-        this.meta = meta;
+        try {
+            if (this.collection) {
+                return new ArrayList<>(results);
+            } else {
+                return results.iterator().next();
+            }
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to build lazy loaded results for entity [" + this.entity + "].", e);
+        }
     }
 
-    @Override
-    public DataHolder createStatic(final Object value) {
-        return new BasicDataHolder(value);
-    }
+    private List<Object> ensureResults() throws NormandraException {
+        if (this.loaded.get()) {
+            return Collections.unmodifiableList(this.keys);
+        }
 
-    @Override
-    public DataHolder createLazy(EntityMeta meta, ColumnMeta column, Object key) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public DataHolder createJoinCollection(EntityMeta meta, JoinCollectionMeta column, Object key) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public DataHolder createJoinColumn(EntityMeta meta, JoinColumnMeta column, Object key) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public DataHolder createMappedColumn(EntityMeta meta, MappedColumnMeta column, Object key) {
-        throw new UnsupportedOperationException();
+        try {
+            this.keys.clear();
+            try (final PropertyQuery q = this.session.query(this.query, this.parameters)) {
+                for (final Map<String, Object> vals : q) {
+                    if (!vals.isEmpty()) {
+                        final Object val = vals.get(vals.keySet().iterator().next());
+                        final Object unpacked = Neo4jUtils.unpackValue(entity.getPrimaryKey(), val);
+                        if (unpacked != null) {
+                            this.keys.add(unpacked);
+                        }
+                    }
+                }
+            }
+            this.loaded.getAndSet(true);
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to get neo4j document by query [" + this.query + "].", e);
+        }
+        return Collections.unmodifiableList(this.keys);
     }
 }

@@ -14,6 +14,8 @@ import org.normandra.NormandraException;
 import org.normandra.cache.EntityCacheFactory;
 import org.normandra.graph.GraphDatabase;
 import org.normandra.meta.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -25,6 +27,8 @@ import java.util.List;
 import java.util.Set;
 
 public class Neo4jDatabase implements GraphDatabase {
+    private static final Logger logger = LoggerFactory.getLogger(Neo4jDatabase.class);
+
     private final URL url;
 
     private final GraphMeta meta;
@@ -85,13 +89,17 @@ public class Neo4jDatabase implements GraphDatabase {
                 // build label
                 final Label label = Label.label(entity.getTable());
                 if (!database.schema().getConstraints(label).iterator().hasNext()) {
-                    ConstraintCreator creator = database.schema().constraintFor(label);
-                    for (final ColumnMeta column : entity.getPrimaryKeys()) {
-                        creator = creator.assertPropertyIsUnique(column.getName());
+                    if (entity.getPrimaryKeys().size() > 1) {
+                        logger.warn("Unable to setup unique constraints for composite primary keys for [" + label + "], index only.");
+                    } else if (!entity.getPrimaryKeys().isEmpty()) {
+                        ConstraintCreator creator = database.schema().constraintFor(label);
+                        for (final ColumnMeta column : entity.getPrimaryKeys()) {
+                            creator = creator.assertPropertyIsUnique(column.getName());
+                        }
+                        creator.create();
                     }
-                    creator.create();
                 }
-                // neo4j only supports index-per-column, so find all the columns we want
+                // neo4j only supports index-per-column in 4.0+, so find all the columns we want
                 final List<ColumnMeta> columns = new ArrayList<>();
                 for (final IndexMeta index : entity.getIndexed()) {
                     columns.addAll(index.getColumns());
@@ -108,16 +116,6 @@ public class Neo4jDatabase implements GraphDatabase {
         } finally {
             database.shutdown();
         }
-    }
-
-    @Override
-    public boolean registerQuery(EntityMeta meta, String name, String query) throws NormandraException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean unregisterQuery(String name) throws NormandraException {
-        return false;
     }
 
     @Override

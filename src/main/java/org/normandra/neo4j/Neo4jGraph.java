@@ -209,6 +209,7 @@ import org.normandra.graph.*;
 import org.normandra.meta.ColumnMeta;
 import org.normandra.meta.EntityMeta;
 import org.normandra.meta.GraphMeta;
+import org.normandra.neo4j.impl.Neo4jDataFactory;
 import org.normandra.property.PropertyFilter;
 import org.normandra.property.PropertyModel;
 import org.normandra.util.EntityBuilder;
@@ -218,6 +219,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * a neo4j graph implementation
@@ -295,7 +297,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
     @Override
     public PropertyQuery query(String query, Map<String, Object> parameters) throws NormandraException {
-        throw new UnsupportedOperationException();
+        return new Neo4jPropertyQuery(this, query, parameters);
     }
 
     @Override
@@ -318,7 +320,6 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         if (!this.meta.isNodeEntity(meta)) {
             throw new IllegalArgumentException("Entity [" + meta + "] is not a registered node type.");
         }
-        final Object key = meta.getId().fromEntity(instance);
 
         try (final org.normandra.Transaction tx = this.beginTransaction()) {
             // save entity
@@ -333,6 +334,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             final GraphDataHandler handler = new GraphDataHandler(model);
             new EntityPersistence(new GraphEntitySession(this)).save(meta, instance, handler);
             tx.success();
+            final Object key = meta.getId().fromEntity(instance);
             final Neo4jNode neo4j = new Neo4jNode(this, node, meta, new StaticEntityReference(instance));
             this.cache.put(meta, key, neo4j);
             return neo4j;
@@ -346,7 +348,6 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         if (null == keys || keys.length <= 0) {
             return Collections.emptyList();
         }
-
         return this.getNodes(meta, Arrays.asList(keys));
     }
 
@@ -435,6 +436,59 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         }
     }
 
+
+    @Override
+    public boolean exists(final EntityMeta meta, final Object key) throws NormandraException {
+        if (null == meta || null == key) {
+            return false;
+        }
+
+        final Map<ColumnMeta, Object> keys = meta.getId().fromKey(key);
+        if (keys.isEmpty()) {
+            return false;
+        }
+
+        final Label label = Neo4jUtils.getLabel(meta);
+        final ColumnMeta primary = meta.getPrimaryKey();
+        final Object value = Neo4jUtils.packValue(primary, keys.get(primary));
+        try (final org.normandra.Transaction tx = this.beginTransaction()) {
+            try (final ResourceIterator<Node> itr = this.service.findNodes(label, primary.getName(), value)) {
+                return itr.hasNext();
+            }
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to determine if node exists [" + key + "].", e);
+        }
+    }
+
+    @Override
+    public Object get(final EntityMeta meta, final Object key) throws NormandraException {
+        final Neo4jNode node = this.getNode(meta, key);
+        if (null == node) {
+            return null;
+        }
+        return node.getEntity();
+    }
+
+    @Override
+    public List<Object> get(final EntityMeta meta, final Object... keys) throws NormandraException {
+        final Collection<org.normandra.graph.Node> nodes = this.getNodes(meta, keys);
+        if (null == nodes || nodes.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return nodes.stream().map(x -> {
+            try {
+                return x.getEntity();
+            } catch (NormandraException e) {
+                throw new IllegalStateException("Unable to get entity from node.", e);
+            }
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public Object load(EntityMeta meta, Map<ColumnMeta, Object> data) throws NormandraException {
+        throw new UnsupportedOperationException();
+    }
+
     private <T> Result queryNodes(final EntityMeta meta, final Collection<?> keys) {
         // example - MATCH (n:Person) WHERE n.name = {value}
         final ColumnMeta primary = meta.getPrimaryKey();
@@ -454,7 +508,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             return this.service.execute(query.toString(), params);
         } else {
             query.append("WHERE n.").append(primary.getName()).append(" IN {value} ");
-            query.append("RETURN n");
+            query.append("RETURN n LIMIT " + keys.size());
             final List<Object> packed = new ArrayList<>(size);
             for (final Object key : keys) {
                 final Object value = Neo4jUtils.packValue(primary, key);
@@ -473,20 +527,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         if (null == meta) {
             return false;
         }
-        final Map<ColumnMeta, Object> keys = meta.getId().fromKey(key);
-        if (keys.isEmpty()) {
-            return false;
-        }
-        final Label label = Neo4jUtils.getLabel(meta);
-        final ColumnMeta primary = meta.getPrimaryKey();
-        final Object value = Neo4jUtils.packValue(primary, keys.get(primary));
-        try (final org.normandra.Transaction tx = this.beginTransaction()) {
-            try (final ResourceIterator<Node> itr = this.service.findNodes(label, primary.getName(), value)) {
-                return itr.hasNext();
-            }
-        } catch (final Exception e) {
-            throw new NormandraException("Unable to determine if node exists [" + key + "].", e);
-        }
+        return this.exists(meta, key);
     }
 
     private EntityMeta detectMetaForNode(final Node node) throws NormandraException {
@@ -657,10 +698,5 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         } catch (final Exception e) {
             throw new NormandraException("Unable to rollback transaction.", e);
         }
-    }
-
-    @Override
-    public Object load(EntityMeta meta, Map<ColumnMeta, Object> data) throws NormandraException {
-        throw new UnsupportedOperationException();
     }
 }

@@ -249,7 +249,7 @@ public class Neo4jNode<T> implements Node<T> {
         this.data = ref;
     }
 
-    protected org.neo4j.graphdb.Node api() {
+    public final org.neo4j.graphdb.Node api() {
         return this.node;
     }
 
