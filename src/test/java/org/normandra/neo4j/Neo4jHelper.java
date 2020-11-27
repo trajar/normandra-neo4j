@@ -48,10 +48,7 @@ public class Neo4jHelper implements TestHelper {
 
     @Override
     public void create(DatabaseMetaBuilder builder) throws Exception {
-        if (this.databaseDir.exists()) {
-            FileUtils.deleteDirectory(this.databaseDir);
-        }
-
+        cleanupDirs();
         EntityCacheFactory cacheFactory = new MemoryCache.Factory(MapFactory.withConcurrency());
         this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, DatabaseConstruction.RECREATE, builder.asGraph());
         this.entityManager = new EntityManagerFactory(this.database, this.database.getMeta()).create();
@@ -59,13 +56,24 @@ public class Neo4jHelper implements TestHelper {
 
     @Override
     public void create(GraphMetaBuilder builder) throws Exception {
-        if (this.databaseDir.exists()) {
-            FileUtils.deleteDirectory(this.databaseDir);
-        }
-
+        cleanupDirs();
         EntityCacheFactory cacheFactory = new MemoryCache.Factory(MapFactory.withConcurrency());
         this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, DatabaseConstruction.RECREATE, builder);
         this.graphManager = new GraphManagerFactory(this.database, this.database.getMeta()).create();
+    }
+
+    private void cleanupDirs() throws Exception {
+        final File logdir = new File("logs");
+        final File lockfile = new File("store_lock");
+        if (databaseDir.exists()) {
+            FileUtils.forceDelete(databaseDir);
+        }
+        if (logdir.exists()) {
+            FileUtils.forceDelete(logdir);
+        }
+        if (lockfile.exists()) {
+            FileUtils.forceDelete(lockfile);
+        }
     }
 
     @Override
@@ -82,8 +90,6 @@ public class Neo4jHelper implements TestHelper {
             this.database.close();
             this.database = null;
         }
-        if (this.databaseDir.exists()) {
-            FileUtils.deleteDirectory(this.databaseDir);
-        }
+        cleanupDirs();
     }
 }
