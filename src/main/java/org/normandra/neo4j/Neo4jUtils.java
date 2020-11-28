@@ -211,9 +211,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * Date: 7/11/14
  */
 public class Neo4jUtils {
-    private static final RelationshipType genericRelationshipType = DynamicRelationshipType.withName("Edge");
+    private static final RelationshipType genericRelationshipType = RelationshipType.withName("Edge");
 
-    private static final Label genericLabel = DynamicLabel.label("Entity");
+    private static final Label genericLabel = Label.label("Entity");
 
     private static final Map<String, RelationshipType> relationshipTypes = new ConcurrentHashMap<>();
 
@@ -228,7 +228,7 @@ public class Neo4jUtils {
         if (existing != null) {
             return existing;
         }
-        final RelationshipType type = DynamicRelationshipType.withName(name);
+        final RelationshipType type = RelationshipType.withName(name);
         relationshipTypes.put(name, type);
         return type;
     }
@@ -238,7 +238,7 @@ public class Neo4jUtils {
         if (existing != null) {
             return existing;
         }
-        final Label type = DynamicLabel.label(name);
+        final Label type = Label.label(name);
         labels.put(name, type);
         return type;
     }
