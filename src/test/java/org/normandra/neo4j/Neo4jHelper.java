@@ -4,7 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.normandra.*;
 import org.normandra.cache.EntityCacheFactory;
 import org.normandra.cache.MapFactory;
-import org.normandra.cache.MemoryCache;
+import org.normandra.cache.StrongMemoryCache;
 import org.normandra.graph.GraphManager;
 import org.normandra.graph.GraphManagerFactory;
 import org.normandra.meta.DatabaseMetaBuilder;
@@ -49,7 +49,7 @@ public class Neo4jHelper implements TestHelper {
     @Override
     public void create(DatabaseMetaBuilder builder) throws Exception {
         cleanupDirs();
-        EntityCacheFactory cacheFactory = new MemoryCache.Factory(MapFactory.withConcurrency());
+        EntityCacheFactory cacheFactory = new StrongMemoryCache.Factory(MapFactory.withConcurrency());
         this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, DatabaseConstruction.RECREATE, builder.asGraph());
         this.entityManager = new EntityManagerFactory(this.database, this.database.getMeta()).create();
     }
@@ -57,7 +57,7 @@ public class Neo4jHelper implements TestHelper {
     @Override
     public void create(GraphMetaBuilder builder) throws Exception {
         cleanupDirs();
-        EntityCacheFactory cacheFactory = new MemoryCache.Factory(MapFactory.withConcurrency());
+        EntityCacheFactory cacheFactory = new StrongMemoryCache.Factory(MapFactory.withConcurrency());
         this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, DatabaseConstruction.RECREATE, builder);
         this.graphManager = new GraphManagerFactory(this.database, this.database.getMeta()).create();
     }
