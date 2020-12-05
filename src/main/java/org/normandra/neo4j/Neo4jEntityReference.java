@@ -202,11 +202,9 @@ import org.normandra.graph.GraphEntitySession;
 import org.normandra.meta.ColumnMeta;
 import org.normandra.meta.EntityMeta;
 import org.normandra.util.EntityBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * a lazy-loaded entity reference
@@ -214,8 +212,6 @@ import java.util.Map;
  * Date: 8/29/14
  */
 public class Neo4jEntityReference<T> implements EntityReference<T> {
-    private static final Logger logger = LoggerFactory.getLogger(Neo4jEntityReference.class);
-
     private final Neo4jGraph graph;
 
     private final EntityMeta meta;
@@ -252,5 +248,25 @@ public class Neo4jEntityReference<T> implements EntityReference<T> {
         final EntityBuilder builder = new EntityBuilder(new GraphEntitySession(this.graph), this.graph.buildDataFactory());
         this.instance = (T) builder.build(this.meta, data);
         return this.instance;
+    }
+
+    @Override
+    public void reload() throws NormandraException {
+        this.instance = null;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Neo4jEntityReference<?> that = (Neo4jEntityReference<?>) o;
+        return Objects.equals(graph, that.graph) &&
+                Objects.equals(meta, that.meta) &&
+                Objects.equals(properties, that.properties);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(graph, meta, properties);
     }
 }
