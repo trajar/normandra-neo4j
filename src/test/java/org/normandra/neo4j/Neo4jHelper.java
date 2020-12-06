@@ -22,6 +22,8 @@ public class Neo4jHelper implements TestHelper {
 
     private EntityManager entityManager;
 
+    private DatabaseConstruction constructionMode = DatabaseConstruction.CREATE_SCHEMA;
+
     @Override
     public EntityManager getManager() {
         if (entityManager != null) {
@@ -50,16 +52,16 @@ public class Neo4jHelper implements TestHelper {
     public void create(DatabaseMetaBuilder builder) throws Exception {
         cleanupDirs();
         EntityCacheFactory cacheFactory = new StrongMemoryCache.Factory(MapFactory.withConcurrency());
-        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, DatabaseConstruction.RECREATE, builder.asGraph());
-        this.entityManager = new EntityManagerFactory(this.database, this.database.getMeta()).create();
+        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, builder.asGraph());
+        this.entityManager = new EntityManagerFactory(this.database, this.database.getMeta(), this.constructionMode).create();
     }
 
     @Override
     public void create(GraphMetaBuilder builder) throws Exception {
         cleanupDirs();
         EntityCacheFactory cacheFactory = new StrongMemoryCache.Factory(MapFactory.withConcurrency());
-        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, DatabaseConstruction.RECREATE, builder);
-        this.graphManager = new GraphManagerFactory(this.database, this.database.getMeta()).create();
+        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, cacheFactory, builder);
+        this.graphManager = new GraphManagerFactory(this.database, this.database.getMeta(), this.constructionMode).create();
     }
 
     private void cleanupDirs() throws Exception {

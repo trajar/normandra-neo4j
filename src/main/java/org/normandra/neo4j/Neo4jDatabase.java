@@ -33,28 +33,25 @@ public class Neo4jDatabase implements GraphDatabase {
 
     private final GraphMeta meta;
 
-    private final DatabaseConstruction constructionMode;
-
     private final EntityCacheFactory cacheFactory;
 
     private final GraphDatabaseFactory databaseFactory;
 
     public static Neo4jDatabase createLocalEmbedded(
             final File path,
-            final EntityCacheFactory factory, final DatabaseConstruction mode,
+            final EntityCacheFactory factory,
             final GraphMetaBuilder builder) {
         final GraphMeta meta = builder.create();
         try {
-            return new Neo4jDatabase(path.toURI().toURL(), factory, mode, meta);
+            return new Neo4jDatabase(path.toURI().toURL(), factory, meta);
         } catch (MalformedURLException e) {
             throw new IllegalStateException(e);
         }
     }
 
-    protected Neo4jDatabase(final URL url, final EntityCacheFactory cache, final DatabaseConstruction mode, final GraphMeta meta) {
+    protected Neo4jDatabase(final URL url, final EntityCacheFactory cache, final GraphMeta meta) {
         this.url = url;
         this.meta = meta;
-        this.constructionMode = mode;
         this.cacheFactory = cache;
         this.databaseFactory = new GraphDatabaseFactory();
     }
@@ -75,16 +72,28 @@ public class Neo4jDatabase implements GraphDatabase {
     }
 
     @Override
-    public void refresh() throws NormandraException {
-        if (DatabaseConstruction.NONE.equals(this.constructionMode)) {
+    public void refreshWith(final DatabaseMeta databaseMeta, final DatabaseConstruction constructionMode) throws NormandraException {
+        final Set<EntityMeta> metas = new HashSet<>();
+        metas.addAll(databaseMeta.getEntities());
+        this.refreshWithEntities(metas, constructionMode);
+    }
+
+    @Override
+    public void refreshWith(final GraphMeta graphMeta, final DatabaseConstruction constructionMode) throws NormandraException {
+        final Set<EntityMeta> metas = new HashSet<>();
+        metas.addAll(graphMeta.getNodeEntities());
+        metas.addAll(graphMeta.getEdgeEntities());
+        metas.addAll(graphMeta.getEntities());
+        this.refreshWithEntities(metas, constructionMode);
+    }
+
+    private void refreshWithEntities(final Set<EntityMeta> metas, final DatabaseConstruction constructionMode) throws NormandraException {
+        if (DatabaseConstruction.NONE.equals(constructionMode)) {
             return;
         }
 
         final GraphDatabaseService database = this.createNeo4j(false);
         try (final Transaction tx = database.beginTx()) {
-            final Set<EntityMeta> metas = new HashSet<>();
-            metas.addAll(this.meta.getNodeEntities());
-            metas.addAll(this.meta.getEdgeEntities());
             for (final EntityMeta entity : metas) {
                 // build label
                 final Label label = Label.label(entity.getTable());

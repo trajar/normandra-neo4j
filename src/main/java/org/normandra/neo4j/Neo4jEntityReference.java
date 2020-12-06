@@ -195,7 +195,9 @@
 package org.normandra.neo4j;
 
 import org.apache.commons.lang.NullArgumentException;
+import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.PropertyContainer;
+import org.neo4j.graphdb.Relationship;
 import org.normandra.NormandraException;
 import org.normandra.data.EntityReference;
 import org.normandra.graph.GraphEntitySession;
@@ -216,7 +218,7 @@ public class Neo4jEntityReference<T> implements EntityReference<T> {
 
     private final EntityMeta meta;
 
-    private final PropertyContainer properties;
+    private PropertyContainer properties;
 
     private T instance;
 
@@ -252,6 +254,15 @@ public class Neo4jEntityReference<T> implements EntityReference<T> {
 
     @Override
     public void reload() throws NormandraException {
+        if (this.properties instanceof Node) {
+            final long nodeId = ((Node) this.properties).getId();
+            this.properties = this.graph.getService().getNodeById(nodeId);
+        } else if (this.properties instanceof Relationship) {
+            final long relationshipId = ((Relationship) this.properties).getId();
+            this.properties = this.graph.getService().getRelationshipById(relationshipId);
+        } else {
+            throw new IllegalStateException();
+        }
         this.instance = null;
     }
 
