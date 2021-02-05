@@ -344,8 +344,10 @@ public class Neo4jNode<T> implements Node<T> {
             throw new NormandraException("Unable to update node [" + this + "].", e);
         }
 
-        // update instance
+        // update reference and cache
         this.data = new StaticEntityReference<>(entity);
+        final Object key = meta.getId().fromEntity(entity);
+        this.graph.getCache().put(meta, key, this);
     }
 
     @Override
