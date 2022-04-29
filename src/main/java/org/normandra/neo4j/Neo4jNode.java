@@ -194,8 +194,7 @@
 
 package org.normandra.neo4j;
 
-import org.apache.commons.lang.NullArgumentException;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.normandra.NormandraException;
@@ -231,17 +230,8 @@ public class Neo4jNode<T> implements Node<T> {
     private EntityReference<T> data;
 
     public Neo4jNode(final Neo4jGraph graph, final org.neo4j.graphdb.Node node, final EntityMeta meta, final EntityReference<T> ref) {
-        if (null == graph) {
-            throw new NullArgumentException("graph");
-        }
-        if (null == node) {
-            throw new NullArgumentException("node");
-        }
-        if (null == ref) {
-            throw new NullArgumentException("reference");
-        }
-        if (null == meta) {
-            throw new NullArgumentException("meta");
+        if (null == graph || null == node || null == ref || null == meta) {
+            throw new IllegalArgumentException();
         }
         this.graph = graph;
         this.node = node;
@@ -271,7 +261,7 @@ public class Neo4jNode<T> implements Node<T> {
     @Override
     public <E, N> boolean hasEdge(final Node<N> node, final E entity) throws NormandraException {
         if (null == node) {
-            throw new NullArgumentException("node");
+            throw new IllegalArgumentException();
         }
         if (null == entity) {
             return false;
@@ -287,7 +277,7 @@ public class Neo4jNode<T> implements Node<T> {
     @Override
     public <E, N> Neo4jEdge<E> createEdge(final Node<N> node, final E entity) throws NormandraException {
         if (null == node) {
-            throw new NullArgumentException("node");
+            throw new IllegalArgumentException();
         }
 
         final Neo4jNode neo4j = (Neo4jNode) node;

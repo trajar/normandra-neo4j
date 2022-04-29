@@ -65,12 +65,11 @@ public class Neo4jPropertyQuery implements PropertyQuery {
             throw new IllegalStateException("Unable to close existing results.", e);
         }
 
-        try {
-            final Transaction tx = this.graph.beginTransaction();
+        try (final Transaction tx = this.graph.beginTransaction()) {
             if (!this.parameters.isEmpty()) {
-                this.result = this.graph.getService().execute(this.query, this.parameters);
+                this.result = this.graph.tx().execute(this.query, this.parameters);
             } else {
-                this.result = this.graph.getService().execute(this.query);
+                this.result = this.graph.tx().execute(this.query);
             }
             return new PropertySetIterator(tx, this.result);
         } catch (final Exception e) {

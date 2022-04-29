@@ -194,8 +194,7 @@
 
 package org.normandra.neo4j;
 
-import org.apache.commons.lang.NullArgumentException;
-import org.neo4j.graphdb.PropertyContainer;
+import org.neo4j.graphdb.Entity;
 import org.normandra.meta.ColumnMeta;
 import org.normandra.meta.EntityMeta;
 import org.normandra.property.EmptyPropertyFilter;
@@ -211,25 +210,19 @@ import java.util.*;
  * Date: 7/14/14
  */
 public class Neo4jPropertyModel implements PropertyModel {
-    private final PropertyContainer container;
+    private final Entity container;
 
     private final EntityMeta meta;
 
     private final PropertyFilter filter;
 
-    public Neo4jPropertyModel(final EntityMeta meta, final PropertyContainer props) {
+    public Neo4jPropertyModel(final EntityMeta meta, final Entity props) {
         this(meta, props, EmptyPropertyFilter.getInstance());
     }
 
-    public Neo4jPropertyModel(final EntityMeta meta, final PropertyContainer props, final PropertyFilter filter) {
-        if (null == meta) {
-            throw new NullArgumentException("meta");
-        }
-        if (null == props) {
-            throw new NullArgumentException("property container");
-        }
-        if (null == filter) {
-            throw new NullArgumentException("property filter");
+    public Neo4jPropertyModel(final EntityMeta meta, final Entity props, final PropertyFilter filter) {
+        if (null == meta || null == props || null == filter) {
+            throw new IllegalArgumentException();
         }
         this.meta = meta;
         this.container = props;

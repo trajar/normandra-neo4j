@@ -194,7 +194,6 @@
 
 package org.normandra.neo4j;
 
-import org.apache.commons.lang.NullArgumentException;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.Transaction;
 import org.normandra.NormandraException;
@@ -222,14 +221,8 @@ public class Neo4jEdge<T> implements Edge<T> {
     private EntityReference<T> data;
 
     public Neo4jEdge(final Neo4jGraph graph, final Relationship rel, final EntityReference<T> ref) {
-        if (null == graph) {
-            throw new NullArgumentException("graph");
-        }
-        if (null == rel) {
-            throw new NullArgumentException("relationship");
-        }
-        if (null == ref) {
-            throw new NullArgumentException("reference");
+        if (null == graph || null == rel || null == ref) {
+            throw new IllegalArgumentException();
         }
         this.graph = graph;
         this.relationship = rel;
@@ -244,7 +237,7 @@ public class Neo4jEdge<T> implements Edge<T> {
     public void delete() throws NormandraException {
         try (final Transaction tx = this.graph.getService().beginTx()) {
             this.relationship.delete();
-            tx.success();
+            tx.commit();
         } catch (final Exception e) {
             throw new NormandraException("Unable to remove relationship [" + this.relationship + "].", e);
         }
@@ -263,7 +256,7 @@ public class Neo4jEdge<T> implements Edge<T> {
             final PropertyModel model = this.graph.buildModel(meta, this.api());
             final DataHandler handler = new GraphDataHandler(model);
             new EntityPersistence(new GraphEntitySession(this.graph)).save(meta, entity, handler);
-            tx.success();
+            tx.commit();
         } catch (final Exception e) {
             throw new NormandraException("Unable to update edge [" + this + "].", e);
         }

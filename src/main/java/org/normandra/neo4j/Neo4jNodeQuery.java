@@ -57,9 +57,9 @@ public class Neo4jNodeQuery<T> implements NodeQuery<T> {
         try {
             final Transaction tx = this.graph.beginTransaction();
             if (!this.parameters.isEmpty()) {
-                this.result = this.graph.getService().execute(this.query, this.parameters);
+                this.result = this.graph.tx().execute(this.query, this.parameters);
             } else {
-                this.result = this.graph.getService().execute(this.query);
+                this.result = this.graph.tx().execute(this.query);
             }
             return new NodeIterator<>(this.graph, tx, this.meta, this.result);
         } catch (final Exception e) {

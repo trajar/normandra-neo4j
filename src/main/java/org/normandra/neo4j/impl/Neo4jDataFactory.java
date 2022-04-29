@@ -194,7 +194,6 @@
 
 package org.normandra.neo4j.impl;
 
-import org.apache.commons.lang.NullArgumentException;
 import org.neo4j.graphdb.Label;
 import org.normandra.data.BasicDataHolder;
 import org.normandra.data.DataHolder;
@@ -223,11 +222,8 @@ public class Neo4jDataFactory implements DataHolderFactory {
     private final EntityBuilder builder;
 
     public Neo4jDataFactory(final Neo4jGraph graph, final GraphMeta meta) {
-        if (null == graph) {
-            throw new NullArgumentException("graph");
-        }
-        if (null == meta) {
-            throw new NullArgumentException("meta");
+        if (null == graph || null == meta) {
+            throw new IllegalArgumentException();
         }
         this.graph = graph;
         this.meta = meta;

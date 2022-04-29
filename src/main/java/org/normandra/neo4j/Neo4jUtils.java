@@ -194,7 +194,9 @@
 
 package org.normandra.neo4j;
 
-import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.Entity;
+import org.neo4j.graphdb.Label;
+import org.neo4j.graphdb.RelationshipType;
 import org.normandra.meta.ColumnMeta;
 import org.normandra.meta.EmbeddedCollectionMeta;
 import org.normandra.meta.EntityMeta;
@@ -250,7 +252,7 @@ public class Neo4jUtils {
         return getLabel(meta.getTable());
     }
 
-    public static Map<ColumnMeta, Object> unpackValues(final EntityMeta meta, final PropertyContainer props) {
+    public static Map<ColumnMeta, Object> unpackValues(final EntityMeta meta, final Entity props) {
         if (null == meta || null == props) {
             return Collections.emptyMap();
         }

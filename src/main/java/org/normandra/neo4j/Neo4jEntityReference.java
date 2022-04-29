@@ -194,9 +194,8 @@
 
 package org.normandra.neo4j;
 
-import org.apache.commons.lang.NullArgumentException;
+import org.neo4j.graphdb.Entity;
 import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.graphdb.Relationship;
 import org.normandra.NormandraException;
 import org.normandra.data.EntityReference;
@@ -218,19 +217,13 @@ public class Neo4jEntityReference<T> implements EntityReference<T> {
 
     private final EntityMeta meta;
 
-    private PropertyContainer properties;
+    private Entity properties;
 
     private T instance;
 
-    public Neo4jEntityReference(final Neo4jGraph graph, final EntityMeta meta, final PropertyContainer properties) {
-        if (null == graph) {
-            throw new NullArgumentException("graph");
-        }
-        if (null == meta) {
-            throw new NullArgumentException("entity meta");
-        }
-        if (null == properties) {
-            throw new NullArgumentException("property container");
+    public Neo4jEntityReference(final Neo4jGraph graph, final EntityMeta meta, final Entity properties) {
+        if (null == graph || null == meta || null == properties) {
+            throw new IllegalArgumentException();
         }
         this.graph = graph;
         this.meta = meta;
@@ -255,11 +248,19 @@ public class Neo4jEntityReference<T> implements EntityReference<T> {
     @Override
     public void reload() throws NormandraException {
         if (this.properties instanceof Node) {
-            final long nodeId = ((Node) this.properties).getId();
-            this.properties = this.graph.getService().getNodeById(nodeId);
+            final long nodeId = this.properties.getId();
+            try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
+                this.properties = this.graph.tx().getNodeById(nodeId);
+            } catch (Exception e) {
+                throw new NormandraException("Unable to reload node reference.", e);
+            }
         } else if (this.properties instanceof Relationship) {
-            final long relationshipId = ((Relationship) this.properties).getId();
-            this.properties = this.graph.getService().getRelationshipById(relationshipId);
+            final long relationshipId = this.properties.getId();
+            try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
+                this.properties = this.graph.tx().getRelationshipById(relationshipId);
+            } catch (Exception e) {
+                throw new NormandraException("Unable to reload edge reference.", e);
+            }
         } else {
             throw new IllegalStateException();
         }

@@ -194,7 +194,6 @@
 
 package org.normandra.neo4j;
 
-import org.apache.commons.lang.NullArgumentException;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.*;
 import org.normandra.DatabaseQuery;
@@ -234,9 +233,9 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
     private final GraphDatabaseService service;
 
-    private final GraphMeta meta;
+    protected final GraphMeta meta;
 
-    private final EntityCache cache;
+    protected final EntityCache cache;
 
     private final AtomicInteger transactionDepth = new AtomicInteger(0);
 
@@ -248,11 +247,8 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
     public Neo4jGraph(final GraphMeta meta, final EntityCache cache, final GraphDatabaseService service) {
         super(meta);
-        if (null == cache) {
-            throw new NullArgumentException("cache");
-        }
-        if (null == service) {
-            throw new NullArgumentException("graph service");
+        if (null == cache || null == service) {
+            throw new IllegalArgumentException();
         }
         this.meta = meta;
         this.cache = cache;
@@ -261,6 +257,13 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
     public final GraphDatabaseService getService() {
         return this.service;
+    }
+
+    public final Transaction tx() {
+        if (null == this.transaction) {
+            throw new IllegalStateException("Transaction not active.");
+        }
+        return this.transaction;
     }
 
     public final EntityCache getCache() {
@@ -308,46 +311,12 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     }
 
     @Override
-    public void close() {
+    public void close() throws Exception {
         if (this.transaction != null) {
             this.transaction.close();
             this.transaction = null;
         }
         this.cache.clear();
-        this.service.shutdown();
-    }
-
-    @Override
-    public Neo4jNode addNode(final EntityMeta meta, final Object instance) throws NormandraException {
-        if (null == instance) {
-            return null;
-        }
-
-        // get entity context
-        if (!this.meta.isNodeEntity(meta)) {
-            throw new IllegalArgumentException("Entity [" + meta + "] is not a registered node type.");
-        }
-
-        try (final org.normandra.Transaction tx = this.beginTransaction()) {
-            // save entity
-            final Label core = Neo4jUtils.getLabel(meta);
-            final Node node = this.service.createNode(core);
-            if (null == node) {
-                return null;
-            }
-
-            // setup property model
-            final PropertyModel model = this.buildModel(meta, node);
-            final GraphDataHandler handler = new GraphDataHandler(model);
-            new EntityPersistence(new GraphEntitySession(this)).save(meta, instance, handler);
-            tx.success();
-            final Object key = meta.getId().fromEntity(instance);
-            final Neo4jNode neo4j = new Neo4jNode(this, node, meta, new StaticEntityReference(instance));
-            this.cache.put(meta, key, neo4j);
-            return neo4j;
-        } catch (final Exception e) {
-            throw new NormandraException("Unable to add node [" + instance + "].", e);
-        }
     }
 
     @Override
@@ -359,35 +328,28 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     }
 
     @Override
-    public Edge getEdge(final EntityMeta meta, final Object key) throws NormandraException {
+    public Neo4jEdge getEdge(final EntityMeta meta, final Object key) throws NormandraException {
         if (null == meta || null == key) {
             return null;
         }
 
-        // check cache
         final Neo4jEdge cached = this.cache.get(meta, key, Neo4jEdge.class);
         if (cached != null) {
             return cached;
         }
 
-        // else query database
-        try (final org.normandra.Transaction tx = this.beginTransaction()) {
-            try (final Result result = this.queryEdges(meta, Collections.singletonList(key))) {
-                try (final ResourceIterator<?> itr = result.columnAs("r")) {
-                    final Object obj = itr.next();
-                    if (obj instanceof Relationship) {
-                        return this.buildEdge((Relationship) obj, meta);
-                    }
-                }
+        try {
+            for (final Neo4jEdge edge : this.queryEdges(meta, Collections.singletonList(key))) {
+                return edge;
             }
-        } catch (Exception e) {
+        } catch (final Exception e) {
             throw new NormandraException("Unable to query edge [" + key + "].", e);
         }
         return null;
     }
 
     @Override
-    public Collection<org.normandra.graph.Node> getNodes(final EntityMeta meta, final Iterable keys) throws NormandraException {
+    public Collection<Neo4jNode> getNodes(final EntityMeta meta, final Iterable keys) throws NormandraException {
         // check meta
         if (null == meta || null == keys) {
             return Collections.emptyList();
@@ -410,23 +372,41 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         final List<Neo4jNode> nodes = new ArrayList<>();
         nodes.addAll(cached.values());
         try (final org.normandra.Transaction tx = this.beginTransaction()) {
-            try (final Result result = this.queryNodes(meta, keyset)) {
-                try (final ResourceIterator<?> itr = result.columnAs("n")) {
-                    while (itr.hasNext()) {
-                        final Object n = itr.next();
-                        if (n instanceof Node) {
-                            final Node node = (Node) n;
-                            final Neo4jNode neo4j = this.buildNode(node);
-                            if (neo4j != null) {
-                                nodes.add(neo4j);
-                            }
-                        }
-                    }
-                    return Collections.unmodifiableList(nodes);
-                }
-            }
+            return this.queryNodesInTransaction(meta, keyset);
         } catch (final Exception e) {
             throw new NormandraException("Unable to query nodes by keys " + keys + ".", e);
+        }
+    }
+
+    @Override
+    public org.normandra.graph.Node addNode(final EntityMeta meta, final Object instance) throws NormandraException {
+        if (null == meta || null == instance) {
+            return null;
+        }
+
+        if (!this.meta.isNodeEntity(meta)) {
+            throw new IllegalArgumentException("Entity [" + meta + "] is not a registered node type.");
+        }
+
+        try (final org.normandra.Transaction tx = this.beginTransaction()) {
+            // save entity
+            final Label core = Neo4jUtils.getLabel(meta);
+            final Node node = transaction.createNode(core);
+            if (null == node) {
+                return null;
+            }
+
+            // setup property model
+            final PropertyModel model = buildModel(meta, node);
+            final GraphDataHandler handler = new GraphDataHandler(model);
+            new EntityPersistence(new GraphEntitySession(this)).save(meta, instance, handler);
+            final Object key = meta.getId().fromEntity(instance);
+            final Neo4jNode neo4j = new Neo4jNode(this, node, meta, new StaticEntityReference(instance));
+            cache.put(meta, key, neo4j);
+            tx.success();
+            return neo4j;
+        } catch (Exception e) {
+            throw new NormandraException("Unable to build node for entity [" + instance + "].", e);
         }
     }
 
@@ -444,25 +424,13 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
 
         // else query database
         try (final org.normandra.Transaction tx = this.beginTransaction()) {
-            try (final Result result = this.queryNodes(meta, Arrays.asList(key))) {
-                try (final ResourceIterator<?> itr = result.columnAs("n")) {
-                    while (itr.hasNext()) {
-                        final Object n = itr.next();
-                        if (n instanceof Node) {
-                            final Node node = (Node) n;
-                            final Neo4jNode neo4j = this.buildNode(node);
-                            if (neo4j != null) {
-                                this.cache.put(meta, key, neo4j);
-                                return neo4j;
-                            }
-                        }
-                    }
-                    return null;
-                }
+            for (final Neo4jNode node : this.queryNodesInTransaction(meta, Collections.singletonList(key))) {
+                return node;
             }
         } catch (final Exception e) {
             throw new NormandraException("Unable to query node by key [" + key + "].", e);
         }
+        return null;
     }
 
     @Override
@@ -480,12 +448,20 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         final ColumnMeta primary = meta.getPrimaryKey();
         final Object value = Neo4jUtils.packValue(primary, keys.get(primary));
         try (final org.normandra.Transaction tx = this.beginTransaction()) {
-            try (final ResourceIterator<Node> itr = this.service.findNodes(label, primary.getName(), value)) {
+            try (final ResourceIterator<Node> itr = this.transaction.findNodes(label, primary.getName(), value)) {
                 return itr.hasNext();
             }
         } catch (final Exception e) {
             throw new NormandraException("Unable to determine if node exists [" + key + "].", e);
         }
+    }
+
+    public <T> boolean exists(final Class<T> clazz, final Object key) throws NormandraException {
+        final EntityMeta meta = this.meta.getNodeMeta(clazz);
+        if (null == meta) {
+            return false;
+        }
+        return this.exists(meta, key);
     }
 
     @Override
@@ -521,37 +497,56 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         return builder.build(meta, data);
     }
 
-    private <T> Result queryEdges(final EntityMeta meta, final Collection<?> keys) {
-        // example - MATCH ()-[r]->() WHERE id(r)= 0 RETURN r
-        final ColumnMeta primary = meta.getPrimaryKey();
-        final RelationshipType type = Neo4jUtils.getRelationshipType(meta);
-        final StringBuilder query = new StringBuilder();
-        query.append("MATCH ()-[r:" + type.name() + "]-()");
-        final int size = keys.size();
-        if (size == 1) {
-            query.append("WHERE r.").append(primary.getName()).append(" = {value} ");
-            query.append("RETURN r LIMIT 1");
-            final Map<String, Object> params = new HashMap<>(1);
-            final Object key = keys.iterator().next();
-            params.put("value", Neo4jUtils.packValue(primary, key));
-            return this.service.execute(query.toString(), params);
-        } else {
-            query.append("WHERE r.").append(primary.getName()).append(" IN {value} ");
-            query.append("RETURN r LIMIT " + keys.size());
-            final List<Object> packed = new ArrayList<>(size);
-            for (final Object key : keys) {
-                final Object value = Neo4jUtils.packValue(primary, key);
-                if (value != null) {
-                    packed.add(value);
+    private Iterable<Neo4jEdge> queryEdges(final EntityMeta meta, final Collection<?> keys) throws Exception {
+        try (final org.normandra.Transaction tx = this.beginTransaction()) {
+            // example - MATCH ()-[r]->() WHERE id(r)= 0 RETURN r
+            final ColumnMeta primary = meta.getPrimaryKey();
+            final StringBuilder query = new StringBuilder();
+            query.append("MATCH ()-[r:" + meta.getTable() + "]-()");
+            final int size = keys.size();
+            if (size <= 0) {
+                return Collections.emptyList();
+            } else if (size == 1) {
+                query.append("WHERE r.").append(primary.getName()).append(" = $idvalue ");
+                query.append("RETURN r LIMIT 1");
+                final Map<String, Object> params = new HashMap<>(1);
+                final Object key = keys.iterator().next();
+                params.put("$idvalue", Neo4jUtils.packValue(primary, key));
+                try (final Result result = this.transaction.execute(query.toString(), params)) {
+                    return buildEdgesFromResult(result, meta);
+                }
+            } else {
+                query.append("WHERE r.").append(primary.getName()).append(" IN {$idvalue} ");
+                query.append("RETURN r LIMIT " + keys.size());
+                final List<Object> packed = new ArrayList<>(size);
+                for (final Object key : keys) {
+                    final Object value = Neo4jUtils.packValue(primary, key);
+                    if (value != null) {
+                        packed.add(value);
+                    }
+                }
+                final Map<String, Object> params = new HashMap<>(1);
+                params.put("$idvalue", packed);
+                try (final Result result = this.transaction.execute(query.toString(), params)) {
+                    return buildEdgesFromResult(result, meta);
                 }
             }
-            final Map<String, Object> params = new HashMap<>(1);
-            params.put("value", packed);
-            return this.service.execute(query.toString(), params);
         }
     }
 
-    private <T> Result queryNodes(final EntityMeta meta, final Collection<?> keys) {
+    private Iterable<Neo4jEdge> buildEdgesFromResult(final Result result, final EntityMeta meta) throws NormandraException {
+        final List<Neo4jEdge> edges = new ArrayList<>();
+        try (final ResourceIterator<?> itr = result.columnAs("r")) {
+            final Object obj = itr.next();
+            if (obj instanceof Relationship) {
+                final Relationship relationship = (Relationship) obj;
+                edges.add(this.buildEdge(relationship, meta));
+            }
+        }
+        return Collections.unmodifiableCollection(edges);
+    }
+
+    private List<Neo4jNode> queryNodesInTransaction(final EntityMeta meta, final Collection<?> keys) throws NormandraException {
         // example - MATCH (n:Person) WHERE n.name = {value}
         final ColumnMeta primary = meta.getPrimaryKey();
         final Label label = Neo4jUtils.getLabel(meta);
@@ -564,7 +559,9 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             final Map<String, Object> params = new HashMap<>(1);
             final Object key = keys.iterator().next();
             params.put("value", Neo4jUtils.packValue(primary, key));
-            return this.service.execute(query.toString(), params);
+            try (final Result result = this.transaction.execute(query.toString(), params)) {
+                return buildNodesFromResult(result, meta);
+            }
         } else {
             query.append("WHERE n.").append(primary.getName()).append(" IN {value} ");
             query.append("RETURN n LIMIT " + keys.size());
@@ -577,16 +574,27 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             }
             final Map<String, Object> params = new HashMap<>(1);
             params.put("value", packed);
-            return this.service.execute(query.toString(), params);
+            try (final Result result = this.transaction.execute(query.toString(), params)) {
+                return buildNodesFromResult(result, meta);
+            }
         }
     }
 
-    public <T> boolean exists(final Class<T> clazz, final Object key) throws NormandraException {
-        final EntityMeta meta = this.meta.getNodeMeta(clazz);
-        if (null == meta) {
-            return false;
+    private List<Neo4jNode> buildNodesFromResult(final Result result, final EntityMeta meta) throws NormandraException {
+        final List<Neo4jNode> nodes = new ArrayList<>();
+        try (final ResourceIterator<?> itr = result.columnAs("r")) {
+            while (itr.hasNext()) {
+                final Object obj = itr.next();
+                if (obj instanceof Node) {
+                    final Node node = (Node) obj;
+                    final Neo4jNode neo4j = this.buildNode(node);
+                    if (neo4j != null) {
+                        nodes.add(neo4j);
+                    }
+                }
+            }
         }
-        return this.exists(meta, key);
+        return Collections.unmodifiableList(nodes);
     }
 
     private EntityMeta detectMetaForRelationship(final Relationship relationship) throws NormandraException {
@@ -630,7 +638,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         return new Neo4jDataFactory(this, this.meta);
     }
 
-    final PropertyModel buildModel(final EntityMeta meta, final PropertyContainer container) {
+    final PropertyModel buildModel(final EntityMeta meta, final Entity container) {
         final PropertyFilter filter = this.meta.getPropertyFilter(meta);
         if (filter != null) {
             return new Neo4jPropertyModel(meta, container, filter);
@@ -750,7 +758,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         this.validateTransactionState();
 
         try {
-            this.transaction.success();
+            this.transaction.commit();
             this.transaction.close();
             this.transaction = null;
         } catch (final Exception e) {
@@ -774,6 +782,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         this.validateTransactionState();
 
         try {
+            this.transaction.rollback();
             this.transaction.close();
             this.transaction = null;
         } catch (final Exception e) {
