@@ -15,6 +15,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -26,7 +27,7 @@ public class Neo4jDatabase implements GraphDatabase, Closeable {
     private final Neo4jGraphFactory databaseFactory;
 
     public static Neo4jDatabase createLocalEmbedded(
-            final File path,
+            final Path path,
             final String database,
             final EntityCacheFactory cacheFactory,
             final GraphMetaBuilder builder) {
@@ -35,8 +36,8 @@ public class Neo4jDatabase implements GraphDatabase, Closeable {
         return new Neo4jDatabase(path, meta, embeddedFactory);
     }
 
-    protected Neo4jDatabase(final File databaseDir, final GraphMeta meta, final Neo4jGraphFactory factory) {
-        this.url = databaseDir.toURI();
+    protected Neo4jDatabase(final Path databaseDir, final GraphMeta meta, final Neo4jGraphFactory factory) {
+        this.url = databaseDir.toUri();
         this.meta = meta;
         this.databaseFactory = factory;
     }

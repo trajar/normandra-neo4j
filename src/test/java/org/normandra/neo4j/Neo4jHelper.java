@@ -11,10 +11,11 @@ import org.normandra.meta.DatabaseMetaBuilder;
 import org.normandra.meta.GraphMetaBuilder;
 
 import java.io.File;
+import java.nio.file.Path;
 
 public class Neo4jHelper implements TestHelper {
 
-    private File databaseDir = new File("neo4j.db");
+    private Path databaseDir = new File("neo4j.db").toPath();
 
     private Neo4jDatabase database;
 
@@ -67,8 +68,8 @@ public class Neo4jHelper implements TestHelper {
     private void cleanupDirs() throws Exception {
         final File logdir = new File("logs");
         final File lockfile = new File("store_lock");
-        if (databaseDir.exists()) {
-            FileUtils.forceDelete(databaseDir);
+        if (databaseDir.toFile().exists()) {
+            FileUtils.forceDelete(databaseDir.toFile());
         }
         if (logdir.exists()) {
             FileUtils.forceDelete(logdir);

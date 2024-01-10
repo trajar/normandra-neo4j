@@ -20,7 +20,7 @@ import org.normandra.neo4j.Neo4jGraphFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -28,7 +28,7 @@ import java.util.Set;
 public class EmbeddedGraphFactory implements Neo4jGraphFactory {
     private static final Logger logger = LoggerFactory.getLogger(EmbeddedGraphFactory.class);
 
-    private final File graphDir;
+    private final Path graphDir;
 
     private final GraphMeta meta;
 
@@ -38,7 +38,7 @@ public class EmbeddedGraphFactory implements Neo4jGraphFactory {
 
     private final DatabaseManagementService managementService;
 
-    public EmbeddedGraphFactory(final File graphDir, final String database, final GraphMeta meta, final EntityCacheFactory cache) {
+    public EmbeddedGraphFactory(final Path graphDir, final String database, final GraphMeta meta, final EntityCacheFactory cache) {
         this.graphDir = graphDir;
         this.meta = meta;
         this.cache = cache;
@@ -55,6 +55,10 @@ public class EmbeddedGraphFactory implements Neo4jGraphFactory {
     public void refresh(final Set<EntityMeta> metas, final DatabaseConstruction constructionMode) throws NormandraException {
         if (DatabaseConstruction.NONE.equals(constructionMode)) {
             return;
+        }
+
+        if (!this.managementService.listDatabases().contains(this.databaseName)) {
+            this.managementService.createDatabase(this.databaseName);
         }
 
         final GraphDatabaseService databaseService = this.managementService.database(this.databaseName);
