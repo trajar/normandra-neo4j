@@ -195,8 +195,8 @@
 package org.normandra.neo4j;
 
 import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.Transaction;
 import org.normandra.NormandraException;
+import org.normandra.Transaction;
 import org.normandra.data.DataHandler;
 import org.normandra.data.EntityReference;
 import org.normandra.data.GraphDataHandler;
@@ -208,6 +208,8 @@ import org.normandra.meta.EntityMeta;
 import org.normandra.property.PropertyModel;
 import org.normandra.util.EntityPersistence;
 
+import java.util.Objects;
+
 /**
  * a neo4j edge context
  * <p>
@@ -216,7 +218,7 @@ import org.normandra.util.EntityPersistence;
 public class Neo4jEdge<T> implements Edge<T> {
     private final Neo4jGraph graph;
 
-    private final Relationship relationship;
+    private Relationship relationship;
 
     private EntityReference<T> data;
 
@@ -229,15 +231,23 @@ public class Neo4jEdge<T> implements Edge<T> {
         this.data = ref;
     }
 
-    protected org.neo4j.graphdb.Relationship api() {
+    public final org.neo4j.graphdb.Relationship api() {
         return this.relationship;
     }
 
     @Override
+    public final void refresh() throws NormandraException {
+        final org.neo4j.graphdb.Relationship updatedRelationship = this.graph.tx().getRelationshipByElementId(this.relationship.getElementId());
+        if (updatedRelationship != null) {
+            this.relationship = updatedRelationship;
+        }
+    }
+
+    @Override
     public void delete() throws NormandraException {
-        try (final Transaction tx = this.graph.getService().beginTx()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             this.relationship.delete();
-            tx.commit();
+            tx.success();
         } catch (final Exception e) {
             throw new NormandraException("Unable to remove relationship [" + this.relationship + "].", e);
         }
@@ -251,12 +261,12 @@ public class Neo4jEdge<T> implements Edge<T> {
             throw new IllegalArgumentException();
         }
 
-        try (final Transaction tx = this.graph.getService().beginTx()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             // save model
             final PropertyModel model = this.graph.buildModel(meta, this.api());
             final DataHandler handler = new GraphDataHandler(model);
             new EntityPersistence(new GraphEntitySession(this.graph)).save(meta, entity, handler);
-            tx.commit();
+            tx.success();
         } catch (final Exception e) {
             throw new NormandraException("Unable to update edge [" + this + "].", e);
         }
@@ -267,7 +277,7 @@ public class Neo4jEdge<T> implements Edge<T> {
 
     @Override
     public Neo4jNode getStart() throws NormandraException {
-        try (final Transaction tx = this.graph.getService().beginTx()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             final org.neo4j.graphdb.Node node = this.relationship.getStartNode();
             if (null == node) {
                 return null;
@@ -280,7 +290,7 @@ public class Neo4jEdge<T> implements Edge<T> {
 
     @Override
     public Neo4jNode getEnd() throws NormandraException {
-        try (final Transaction tx = this.graph.getService().beginTx()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             final org.neo4j.graphdb.Node node = this.relationship.getEndNode();
             if (null == node) {
                 return null;
@@ -299,7 +309,7 @@ public class Neo4jEdge<T> implements Edge<T> {
         if (!(node instanceof Neo4jNode)) {
             throw new IllegalStateException("Expected neo4j node.");
         }
-        try (final Transaction tx = this.graph.getService().beginTx()) {
+        try (final Transaction tx = this.graph.beginTransaction()) {
             final org.neo4j.graphdb.Node other = this.relationship.getOtherNode(((Neo4jNode) node).api());
             if (null == other) {
                 return null;
@@ -317,29 +327,14 @@ public class Neo4jEdge<T> implements Edge<T> {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        Neo4jEdge neo4jEdge = (Neo4jEdge) o;
-
-        if (data != null ? !data.equals(neo4jEdge.data) : neo4jEdge.data != null) {
-            return false;
-        }
-        if (relationship != null ? !relationship.equals(neo4jEdge.relationship) : neo4jEdge.relationship != null) {
-            return false;
-        }
-
-        return true;
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Neo4jEdge<?> neo4jEdge = (Neo4jEdge<?>) o;
+        return Objects.equals(relationship, neo4jEdge.relationship) && Objects.equals(data, neo4jEdge.data);
     }
 
     @Override
     public int hashCode() {
-        int result = relationship != null ? relationship.hashCode() : 0;
-        result = 31 * result + (data != null ? data.hashCode() : 0);
-        return result;
+        return Objects.hash(relationship, data);
     }
 }

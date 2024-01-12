@@ -223,9 +223,9 @@ import java.util.stream.Collectors;
 public class Neo4jNode<T> implements Node<T> {
     private final Neo4jGraph graph;
 
-    private final org.neo4j.graphdb.Node node;
-
     private final EntityMeta meta;
+
+    private org.neo4j.graphdb.Node node;
 
     private EntityReference<T> data;
 
@@ -244,18 +244,24 @@ public class Neo4jNode<T> implements Node<T> {
     }
 
     @Override
+    public final void refresh() throws NormandraException {
+        final org.neo4j.graphdb.Node updatedNode = this.graph.tx().getNodeByElementId(this.node.getElementId());
+        if (updatedNode != null) {
+            this.node = updatedNode;
+        }
+    }
+
+    @Override
     public T getEntity() throws NormandraException {
         return this.data.getInstance();
     }
 
     @Override
     public void delete() throws NormandraException {
-        try (final Transaction tx = this.graph.beginTransaction()) {
+        this.graph.withTransaction(tx -> {
             this.api().delete();
             tx.success();
-        } catch (final Exception e) {
-            throw new NormandraException("Unable to remove node [" + this.node + "].", e);
-        }
+        });
     }
 
     @Override
@@ -324,15 +330,12 @@ public class Neo4jNode<T> implements Node<T> {
             throw new IllegalArgumentException();
         }
 
-        try (final Transaction tx = this.graph.beginTransaction()) {
-            // save node
-            final PropertyModel model = this.graph.buildModel(meta, this.api());
+        this.graph.withTransaction(tx -> {
+            final PropertyModel model = this.graph.buildModel(this.meta, this.api());
             final GraphDataHandler handler = new GraphDataHandler(model);
-            new EntityPersistence(new GraphEntitySession(this.graph)).save(meta, entity, handler);
+            new EntityPersistence(new GraphEntitySession(this.graph)).save(this.meta, entity, handler);
             tx.success();
-        } catch (final Exception e) {
-            throw new NormandraException("Unable to update node [" + this + "].", e);
-        }
+        });
 
         // update reference and cache
         this.data = new StaticEntityReference<>(entity);
@@ -546,12 +549,11 @@ public class Neo4jNode<T> implements Node<T> {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Neo4jNode<?> neo4jNode = (Neo4jNode<?>) o;
-        return Objects.equals(graph, neo4jNode.graph) &&
-                Objects.equals(node, neo4jNode.node);
+        return Objects.equals(node, neo4jNode.node) && Objects.equals(data, neo4jNode.data);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(graph, node);
+        return Objects.hash(node, data);
     }
 }

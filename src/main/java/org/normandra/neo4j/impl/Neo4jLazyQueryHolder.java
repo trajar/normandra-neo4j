@@ -196,6 +196,7 @@ package org.normandra.neo4j.impl;
 
 import org.normandra.NormandraException;
 import org.normandra.PropertyQuery;
+import org.normandra.Transaction;
 import org.normandra.data.DataHolder;
 import org.normandra.meta.EntityMeta;
 import org.normandra.neo4j.Neo4jGraph;
@@ -261,7 +262,7 @@ public class Neo4jLazyQueryHolder implements DataHolder {
             return Collections.unmodifiableList(this.keys);
         }
 
-        try {
+        try (final Transaction tx = this.session.beginTransaction()) {
             this.keys.clear();
             try (final PropertyQuery q = this.session.query(this.query, this.parameters)) {
                 for (final Map<String, Object> vals : q) {

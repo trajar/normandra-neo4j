@@ -17,6 +17,8 @@ public class Neo4jHelper implements TestHelper {
 
     private Path databaseDir = new File("neo4j.db").toPath();
 
+    private static String databaseName = "neo4j";
+
     private Neo4jDatabase database;
 
     private GraphManager graphManager;
@@ -53,7 +55,7 @@ public class Neo4jHelper implements TestHelper {
     public void create(DatabaseMetaBuilder builder) throws Exception {
         cleanupDirs();
         EntityCacheFactory cacheFactory = new StrongMemoryCache.Factory(MapFactory.withConcurrency());
-        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, "test_db", cacheFactory, builder.asGraph());
+        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, databaseName, cacheFactory, builder.asGraph());
         this.entityManager = new EntityManagerFactory(this.database, this.database.getMeta(), this.constructionMode).create();
     }
 
@@ -61,7 +63,7 @@ public class Neo4jHelper implements TestHelper {
     public void create(GraphMetaBuilder builder) throws Exception {
         cleanupDirs();
         EntityCacheFactory cacheFactory = new StrongMemoryCache.Factory(MapFactory.withConcurrency());
-        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, "test_db", cacheFactory, builder);
+        this.database = Neo4jDatabase.createLocalEmbedded(databaseDir, databaseName, cacheFactory, builder);
         this.graphManager = new GraphManagerFactory(this.database, this.database.getMeta(), this.constructionMode).create();
     }
 

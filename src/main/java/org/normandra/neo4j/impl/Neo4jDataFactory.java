@@ -245,7 +245,7 @@ public class Neo4jDataFactory implements DataHolderFactory {
         final EntityMeta joinedMeta = mappedColumn.getEntity();
         final String mappedProperty = mappedColumn.getColumn().getName();
         final Label label = Neo4jUtils.getLabel(joinedMeta);
-        final String query = "MATCH (n:" + label + ") WHERE n." + mappedProperty + " = {value} RETURN n." + joinedMeta.getPrimaryKey().getName();
+        final String query = "MATCH (n:" + label + ") WHERE n." + mappedProperty + " = $value RETURN n." + joinedMeta.getPrimaryKey().getName();
         final Map<String, Object> params = new HashMap<>(1);
         params.put("value", Neo4jUtils.packValue(joinedMeta.getPrimaryKey(), key));
         return new Neo4jLazyQueryHolder(this.graph, joinedMeta, true, query, params);

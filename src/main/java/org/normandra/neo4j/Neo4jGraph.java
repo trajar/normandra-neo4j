@@ -547,6 +547,43 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
     }
 
     private List<Neo4jNode> queryNodesInTransaction(final EntityMeta meta, final Collection<?> keys) throws NormandraException {
+        if (meta.getPrimaryKeys().size() == 1) {
+            return queryNodesWithSingleKeyInTransaction(meta, keys);
+        } else {
+            return queryNodesWithCompositeKeysInTransaction(meta, keys);
+        }
+    }
+
+    private List<Neo4jNode> queryNodesWithCompositeKeysInTransaction(final EntityMeta meta, final Collection<?> keys) throws NormandraException {
+        final List<ColumnMeta> primaryKeys = new ArrayList<>(meta.getPrimaryKeys());
+        final Label label = Neo4jUtils.getLabel(meta);
+        final List<Neo4jNode> nodes = new ArrayList<>(keys.size());
+        for (final Object key : keys) {
+            final Map<String, Object> params = new HashMap<>(primaryKeys.size());
+            final StringBuilder query = new StringBuilder();
+            query.append("MATCH (n:").append(label.name()).append(") WHERE ");
+            int keyNum = 0;
+            for (final Map.Entry<ColumnMeta, Object> keyEntry : meta.getId().fromKey(key).entrySet()) {
+                if (keyNum > 0) {
+                    query.append(" AND ");
+                }
+                final String propertyName = keyEntry.getKey().getName();
+                final String valueName = "value" + keyNum;
+                query.append("n.").append(propertyName).append(" = $").append(valueName);
+                params.put(valueName, Neo4jUtils.packValue(keyEntry.getKey(), keyEntry.getValue()));
+                keyNum++;
+            }
+            query.append(" RETURN n LIMIT 1");
+            if (params.size() == primaryKeys.size()) {
+                try (final Result result = this.transaction.execute(query.toString(), params)) {
+                    nodes.addAll(buildNodesFromResult(result, meta, "n"));
+                }
+            }
+        }
+        return nodes;
+    }
+
+    private List<Neo4jNode> queryNodesWithSingleKeyInTransaction(final EntityMeta meta, final Collection<?> keys) throws NormandraException {
         // example - MATCH (n:Person) WHERE n.name = {value}
         final ColumnMeta primary = meta.getPrimaryKey();
         final Label label = Neo4jUtils.getLabel(meta);
@@ -554,16 +591,16 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         query.append("MATCH (n:").append(label.name()).append(") ");
         final int size = keys.size();
         if (size == 1) {
-            query.append("WHERE n.").append(primary.getName()).append(" = {value} ");
+            query.append("WHERE n.").append(primary.getName()).append(" = $value ");
             query.append("RETURN n LIMIT 1");
             final Map<String, Object> params = new HashMap<>(1);
             final Object key = keys.iterator().next();
             params.put("value", Neo4jUtils.packValue(primary, key));
             try (final Result result = this.transaction.execute(query.toString(), params)) {
-                return buildNodesFromResult(result, meta);
+                return buildNodesFromResult(result, meta, "n");
             }
         } else {
-            query.append("WHERE n.").append(primary.getName()).append(" IN {value} ");
+            query.append("WHERE n.").append(primary.getName()).append(" IN $value ");
             query.append("RETURN n LIMIT " + keys.size());
             final List<Object> packed = new ArrayList<>(size);
             for (final Object key : keys) {
@@ -575,14 +612,18 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             final Map<String, Object> params = new HashMap<>(1);
             params.put("value", packed);
             try (final Result result = this.transaction.execute(query.toString(), params)) {
-                return buildNodesFromResult(result, meta);
+                return buildNodesFromResult(result, meta, "n");
             }
         }
     }
 
-    private List<Neo4jNode> buildNodesFromResult(final Result result, final EntityMeta meta) throws NormandraException {
+    private List<Neo4jNode> buildNodesFromResult(final Result result, final EntityMeta meta, final String expectedColumn) throws NormandraException {
+        List<String> columns = result.columns();
+        if (columns.isEmpty()) {
+            return Collections.emptyList();
+        }
         final List<Neo4jNode> nodes = new ArrayList<>();
-        try (final ResourceIterator<?> itr = result.columnAs("r")) {
+        try (final ResourceIterator<?> itr = result.columnAs(expectedColumn)) {
             while (itr.hasNext()) {
                 final Object obj = itr.next();
                 if (obj instanceof Node) {
@@ -732,21 +773,12 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
         }
     }
 
-    private void validateTransactionState() throws NormandraException {
-        if (null == this.transaction) {
-            // nothing pending
-            return;
-        }
-        if (this.transactionCommitted && this.transactionRolledback) {
-            throw new NormandraException("Invalid transaction state - rolled back and committed.");
-        }
-    }
-
     @Override
     public void commitWork() throws NormandraException {
         if (null == this.transaction) {
             throw new NormandraException("Transaction not started.");
         }
+
 
         this.transactionCommitted = true;
         final int depth = this.transactionDepth.decrementAndGet();
@@ -755,15 +787,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             return;
         }
 
-        this.validateTransactionState();
-
-        try {
-            this.transaction.commit();
-            this.transaction.close();
-            this.transaction = null;
-        } catch (final Exception e) {
-            throw new NormandraException("Unable to commit transaction.", e);
-        }
+        this.processAndCloseTransaction();
     }
 
     @Override
@@ -779,14 +803,52 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
             return;
         }
 
-        this.validateTransactionState();
+        this.processAndCloseTransaction();
+    }
+
+    @Override
+    public void concludeWork() throws NormandraException {
+        if (null == this.transaction) {
+            throw new NormandraException("Transaction not started.");
+        }
+
+        final int depth = this.transactionDepth.decrementAndGet();
+        if (depth > 0) {
+            logger.trace("Transaction marked as read-only, current depth is [" + depth + "].");
+            return;
+        }
+
+        this.processAndCloseTransaction();
+    }
+
+    private void processAndCloseTransaction() throws NormandraException {
+        if (null == this.transaction) {
+            throw new NormandraException("Transaction not started.");
+        }
+
+        if (this.transactionCommitted && this.transactionRolledback) {
+            throw new NormandraException("Invalid transaction state - rolled back and committed.");
+        }
+
+        if (this.transactionRolledback) {
+            try {
+                this.transaction.rollback();
+            } catch (final Exception e) {
+                throw new NormandraException("Unable to rollback transaction.", e);
+            }
+        } else if (this.transactionCommitted) {
+            try {
+                this.transaction.commit();
+            } catch (final Exception e) {
+                throw new NormandraException("Unable to commit transaction.", e);
+            }
+        }
 
         try {
-            this.transaction.rollback();
             this.transaction.close();
             this.transaction = null;
         } catch (final Exception e) {
-            throw new NormandraException("Unable to rollback transaction.", e);
+            throw new NormandraException("Unable to close transaction.", e);
         }
     }
 }
