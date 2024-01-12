@@ -511,7 +511,7 @@ public class Neo4jGraph extends GraphAdapter implements Graph {
                 query.append("RETURN r LIMIT 1");
                 final Map<String, Object> params = new HashMap<>(1);
                 final Object key = keys.iterator().next();
-                params.put("$idvalue", Neo4jUtils.packValue(primary, key));
+                params.put("idvalue", Neo4jUtils.packValue(primary, key));
                 try (final Result result = this.transaction.execute(query.toString(), params)) {
                     return buildEdgesFromResult(result, meta);
                 }

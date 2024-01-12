@@ -259,6 +259,7 @@ public class Neo4jNode<T> implements Node<T> {
     @Override
     public void delete() throws NormandraException {
         this.graph.withTransaction(tx -> {
+            this.refresh();
             this.api().delete();
             tx.success();
         });
@@ -299,6 +300,7 @@ public class Neo4jNode<T> implements Node<T> {
         final RelationshipType type = Neo4jUtils.getRelationshipType(meta);
         try (final Transaction tx = this.graph.beginTransaction()) {
             // save relationship properties
+            this.refresh();
             final Relationship relationship = this.node.createRelationshipTo(neo4j.node, type);
             if (null == relationship) {
                 return null;
@@ -331,6 +333,7 @@ public class Neo4jNode<T> implements Node<T> {
         }
 
         this.graph.withTransaction(tx -> {
+            this.refresh();
             final PropertyModel model = this.graph.buildModel(this.meta, this.api());
             final GraphDataHandler handler = new GraphDataHandler(model);
             new EntityPersistence(new GraphEntitySession(this.graph)).save(this.meta, entity, handler);
@@ -347,6 +350,7 @@ public class Neo4jNode<T> implements Node<T> {
     public int getDegree() throws NormandraException {
         try {
             try (final Transaction tx = this.graph.beginTransaction()) {
+                this.refresh();
                 return this.node.getDegree();
             }
         } catch (final Exception e) {
@@ -435,7 +439,6 @@ public class Neo4jNode<T> implements Node<T> {
 
     @Override
     public <E, N> Iterable<Node<N>> expandByTypes(final int depth, final Iterable<Class<E>> edgeTypes) throws NormandraException {
-
         final Set<String> edgeLabels = new ArraySet<>();
         if (edgeTypes != null) {
             for (final Class<?> clazz : edgeTypes) {
@@ -470,6 +473,7 @@ public class Neo4jNode<T> implements Node<T> {
     @Override
     public Collection<Edge> getEdges() throws NormandraException {
         try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
+            this.refresh();
             final int num = this.node.getDegree();
             final List<Edge> edges = new ArrayList<>(num);
             for (final Relationship relationship : this.node.getRelationships()) {
@@ -494,6 +498,7 @@ public class Neo4jNode<T> implements Node<T> {
         try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
             final Set<Edge> edges = new HashSet<>();
             final RelationshipType type = Neo4jUtils.getRelationshipType(meta);
+            this.refresh();
             for (final Relationship relationship : this.node.getRelationships(type)) {
                 final Edge edge = this.graph.buildEdge(relationship);
                 if (edge != null) {
@@ -529,6 +534,7 @@ public class Neo4jNode<T> implements Node<T> {
 
         // query edges
         try (final org.normandra.Transaction tx = this.graph.beginTransaction()) {
+            this.refresh();
             final int num = this.node.getDegree();
             final List<Edge<E>> edges = new ArrayList<>(num);
             final RelationshipType[] list = relations.toArray(new RelationshipType[relations.size()]);
