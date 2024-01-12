@@ -237,9 +237,13 @@ public class Neo4jEdge<T> implements Edge<T> {
 
     @Override
     public final void refresh() throws NormandraException {
-        final org.neo4j.graphdb.Relationship updatedRelationship = this.graph.tx().getRelationshipByElementId(this.relationship.getElementId());
-        if (updatedRelationship != null) {
-            this.relationship = updatedRelationship;
+        try {
+            final org.neo4j.graphdb.Relationship updatedRelationship = this.graph.tx().getRelationshipByElementId(this.relationship.getElementId());
+            if (updatedRelationship != null) {
+                this.relationship = updatedRelationship;
+            }
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to refresh relationship by ID [" + this.relationship.getElementId() + "].", e);
         }
     }
 

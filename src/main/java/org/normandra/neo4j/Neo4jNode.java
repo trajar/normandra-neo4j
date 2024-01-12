@@ -245,9 +245,13 @@ public class Neo4jNode<T> implements Node<T> {
 
     @Override
     public final void refresh() throws NormandraException {
-        final org.neo4j.graphdb.Node updatedNode = this.graph.tx().getNodeByElementId(this.node.getElementId());
-        if (updatedNode != null) {
-            this.node = updatedNode;
+        try {
+            final org.neo4j.graphdb.Node updatedNode = this.graph.tx().getNodeByElementId(this.node.getElementId());
+            if (updatedNode != null) {
+                this.node = updatedNode;
+            }
+        } catch (final Exception e) {
+            throw new NormandraException("Unable to refresh node by ID [" + this.node.getElementId() + "].", e);
         }
     }
 
